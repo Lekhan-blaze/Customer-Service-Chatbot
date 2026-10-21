@@ -1,0 +1,522 @@
+[
+  {
+    "id": 1,
+    "text": "Thank you so much! The course materials are fantastic and helped me pass my certification.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 2,
+    "text": "Can you please tell me what prerequisites are needed for the Python class?",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 3,
+    "text": "I have been waiting for 3 weeks and still haven't received my certificate. This is completely unacceptable!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 4,
+    "text": "My final test starts in 10 minutes and my account is locked out! Please unlock immediately!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 5,
+    "text": "Oh wonderful! Charged twice and now the videos won't play. Truly world-class customer service!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 6,
+    "text": "Please provide the formal contact details of your legal counsel. My attorney will be serving notice under the Consumer Protection Act.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "legal_threat"
+  },
+  {
+    "id": 7,
+    "text": "I noticed an unrecognized login to my dashboard from an IP in Russia modifying my email address yesterday.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 1, "sarcastic": 0},
+    "risk_category": "account_compromise"
+  },
+  {
+    "id": 8,
+    "text": "My banking statement reflects two debits of ₹5000 for enrollment reference ENR-4421 on October 12.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 9,
+    "text": "Are there weekend batches available for the Data Science bootcamp?",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 10,
+    "text": "Great explanation in module 3! Really enjoyed the hands-on project.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 11,
+    "text": "I asked for a refund five times and you keep giving robotic non-answers. Fix this right now!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 12,
+    "text": "Sure, taking 15 days to answer a simple email is definitely best-in-class support.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": null
+  },
+  {
+    "id": 13,
+    "text": "Our corporate compliance team requires an audit disclosure on the recent database breach involving student records.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "data_breach"
+  },
+  {
+    "id": 14,
+    "text": "What is the refund policy if I cannot attend due to medical reasons?",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 15,
+    "text": "This course changed my career, got placed as a junior data analyst! Thank you team!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 16,
+    "text": "बहुत बहुत धन्यवाद! कोर्स बहुत अच्छा है और मुझे बहुत कुछ सीखने को मिला।",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 17,
+    "text": "क्या इस कोर्स के लिए कोई कोडिंग का पूर्व अनुभव चाहिए?",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 18,
+    "text": "तीन हफ्ते से सर्टिफिकेट नहीं आया, हर बार सिर्फ आश्वासन मिलता है। बेहद घटिया सर्विस!",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 19,
+    "text": "मेरा एग्जाम आधे घंटे में है और लॉगिन काम नहीं कर रहा, कृपया तुरंत ठीक करें!",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 20,
+    "text": "वाह क्या सर्विस है! पैसे दो बार काट लिए और पोर्टल भी बंद कर दिया। शानदार!",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 21,
+    "text": "कृपया अपनी लीगल टीम का ईमेल दें। उपभोक्ता संरक्षण फोरम में शिकायत दर्ज करने जा रहा हूँ।",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "legal_threat"
+  },
+  {
+    "id": 22,
+    "text": "मेरे खाते से किसी अज्ञात व्यक्ति ने पासवर्ड रीसेट किया है, तुरंत अकाउंट सुरक्षित करें।",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 1, "sarcastic": 0},
+    "risk_category": "account_compromise"
+  },
+  {
+    "id": 23,
+    "text": "मेरे बैंक खाते से ₹4999 दो बार कट गए हैं, कृपया एक पेमेंट वापस करें।",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 24,
+    "text": "कोर्स की वैलिडिटी कितने महीने तक रहती है?",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 25,
+    "text": "टीचर का पढ़ाने का तरीका बहुत ही सरल और प्रभावी है।",
+    "language": "Hindi",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 26,
+    "text": "நன்றி! பாடங்கள் மிகவும் பயனுள்ளதாக இருந்தது, நல்ல விளக்கம்.",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 27,
+    "text": "இந்த பாடத்திட்டத்தை வார இறுதி நாட்களில் படிக்க முடியுமா?",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 28,
+    "text": "ஒரு மாதமாக சான்றிதழ் வரவில்லை, ஆதரவு குழுவிலிருந்து எந்த பதிலும் இல்லை. மிகுந்த ஏமாற்றம்!",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 29,
+    "text": "தேர்வு தொடங்குகிறது, உடனே அணுகல் வழங்கவும்! மிகவும் அவசரம்!",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 30,
+    "text": "அற்புதம்! பணம் இருமுறை எடுக்கப்பட்டது, பாடம் திறக்கவில்லை. நல்ல சேவை!",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 31,
+    "text": "என் வழக்கறிஞர் மூலம் சட்டப்பூர்வ நோட்டீஸ் அனுப்ப உள்ளேன், உங்கள் நிறுவன முகவரி தரவும்.",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "legal_threat"
+  },
+  {
+    "id": 32,
+    "text": "என் கணக்கில் அடையாளம் தெரியாத நபர் உள்நுழைந்துள்ளார், தயவுசெய்து கணக்கை முடக்கவும்.",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 1, "sarcastic": 0},
+    "risk_category": "account_compromise"
+  },
+  {
+    "id": 33,
+    "text": "வங்கி கணக்கில் ₹5000 இருமுறை பிடிக்கப்பட்டுள்ளது, தயவுசெய்து சரிபார்க்கவும்.",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 34,
+    "text": "கட்டண ரசீது எவ்வாறு பதிவிறக்குவது?",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 35,
+    "text": "பயிற்சியாளர் மிகவும் பொறுமையாக சந்தேகங்களை தீர்த்து வைத்தார்.",
+    "language": "Tamil",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 36,
+    "text": "ಧನ್ಯವಾದಗಳು! ಕೋರ್ಸ್ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ, ಉಪಯುಕ್ತ ಮಾಹಿತಿ.",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 37,
+    "text": "ಈ ಕೋರ್ಸ್ ಶುಲ್ಕವನ್ನು ಕಂತುಗಳಲ್ಲಿ ಪಾವತಿಸಲು ಅವಕಾಶವಿದೆಯೇ?",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 38,
+    "text": "ಎರಡು ವಾರಗಳಿಂದ ಯಾವುದೇ ಉತ್ತರ ಬಂದಿಲ್ಲ, ತುಂಬಾ ಬೇಜವಾಬ್ದಾರಿ ಸೇವೆ!",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 39,
+    "text": "ನನ್ನ ಪರೀಕ್ಷೆ ಇಂದೇ ಇದೆ, ಕೂಡಲೇ ಲಾಗಿನ್ ಸಮಸ್ಯೆಯನ್ನು ಬಗೆಹರಿಸಿ, ತೀರಾ ತುರ್ತು!",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 40,
+    "text": "ಭೇಷ್! ಶುಲ್ಕ ಎರಡು ಬಾರಿ ಕಡಿತವಾಗಿದೆ ಮತ್ತು ತರಗತಿಗಳು ಕಾಣಿಸುತ್ತಿಲ್ಲ, ಅದ್ಭುತ ಸೇವೆ!",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 41,
+    "text": "ಗ್ರಾಹಕರ ನ್ಯಾಯಾಲಯದಲ್ಲಿ ದೂರು ಸಲ್ಲಿಸಲು ನಿಮ್ಮ ಅಧಿಕೃತ ವಿಳಾಸ ನೀಡಿ.",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "legal_threat"
+  },
+  {
+    "id": 42,
+    "text": "ನನ್ನ ಖಾತೆಗೆ ಅಪರಿಚಿತರು ಲಾಗಿನ್ ಆಗಿದ್ದಾರೆ, ದಯವಿಟ್ಟು ಭದ್ರತಾ ಪರಿಶೀಲನೆ ನಡೆಸಿ.",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 1, "sarcastic": 0},
+    "risk_category": "account_compromise"
+  },
+  {
+    "id": 43,
+    "text": "ನನ್ನ ಬ್ಯಾಂಕ್ ಖಾತೆಯಿಂದ ₹5000 ಎರಡು ಬಾರಿ ಕಡಿತಗೊಂಡಿದೆ, ಪರಿಶೀಲಿಸಿ.",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 44,
+    "text": "ಕೋರ್ಸ್ ಮುಗಿದ ನಂತರ ಪ್ರಮಾಣಪತ್ರ ಲಭ್ಯವಾಗುತ್ತದೆಯೇ?",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 45,
+    "text": "ಪ್ರಾಕ್ಟಿಕಲ್ ಪ್ರಾಜೆಕ್ಟ್‌ಗಳು ತುಂಬಾ ಉಪಯುಕ್ತವಾಗಿದ್ದವು.",
+    "language": "Kannada",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 46,
+    "text": "Bahut badiya course hai boss, sab easily samajh aa gaya!",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 47,
+    "text": "Kya main EMI option choose kar sakta hoon payment ke liye?",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 48,
+    "text": "Bhai 10 din se ticket pending hai, koi reply nahi kar raha, kya bakwas support hai!",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 49,
+    "text": "Test chalu hone wala hai jaldi login error resolve karo please, bohot urgent hai!",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 50,
+    "text": "Wah bhai wah! 2 baar paise kaat liye aur bolte ho wait karo, super service!",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 51,
+    "text": "Main consumer court jaa raha hoon agar kal tak refund nahi aaya, lawyer se baat ho chuki hai.",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "legal_threat"
+  },
+  {
+    "id": 52,
+    "text": "Mera account hack ho gaya hai lagta hai, phone number change ho gaya automatically.",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 1, "sarcastic": 0},
+    "risk_category": "account_compromise"
+  },
+  {
+    "id": 53,
+    "text": "Bank statement me do baar debit hua 4999 ka, reference number check karo.",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 54,
+    "text": "Course recordings offline download kar sakte hain kya mobile app pe?",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 55,
+    "text": "Interview preparation session was really helpful, thanks a lot!",
+    "language": "Hinglish",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 56,
+    "text": "Superb mentorship, cleared all my doubts within minutes.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 57,
+    "text": "What is the duration of the machine learning course?",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 58,
+    "text": "Fourth time calling customer support and still no resolution. Ridiculous!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 59,
+    "text": "I am unable to submit the assignment and the portal closes in 5 minutes!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 1, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 60,
+    "text": "Oh great job guys! Deleted my assignment submission right before the deadline. Amazing tech!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 0, "negative": 1, "frustrated": 1, "urgent": 0, "sarcastic": 1},
+    "risk_category": null
+  },
+  {
+    "id": 61,
+    "text": "Notice of dispute: Failure to refund registration fees will result in statutory arbitration proceedings.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "legal_threat"
+  },
+  {
+    "id": 62,
+    "text": "A foreign IP attempted multiple failed authentication requests on my account profile.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 1, "frustrated": 0, "urgent": 1, "sarcastic": 0},
+    "risk_category": "account_compromise"
+  },
+  {
+    "id": 63,
+    "text": "Payment gateway charged my card twice for the same transaction ID TXN-9981.",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": "duplicate_payment"
+  },
+  {
+    "id": 64,
+    "text": "How do I update my registered email ID?",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 0, "neutral": 1, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  },
+  {
+    "id": 65,
+    "text": "Loved the practical exercises and quiz questions!",
+    "language": "English",
+    "is_synthetic": true,
+    "labels": {"positive": 1, "neutral": 0, "negative": 0, "frustrated": 0, "urgent": 0, "sarcastic": 0},
+    "risk_category": null
+  }
+]

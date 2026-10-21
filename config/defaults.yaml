@@ -55,3 +55,35 @@ conversation:
   intent_confidence_threshold: 0.60
   max_recent_messages: 10
 
+# ── Sentiment Analysis ──
+sentiment:
+  sarcasm_threshold: 0.60
+  recent_messages_count: 5
+  low_confidence_threshold: 0.45
+  calibration:
+    enabled: true
+    weights:
+      positive: { a: 2.1, b: -0.8 }
+      neutral: { a: 1.8, b: -0.4 }
+      negative: { a: 2.2, b: -0.7 }
+      frustrated: { a: 2.3, b: -0.9 }
+      urgent: { a: 2.4, b: -1.0 }
+      sarcastic: { a: 2.5, b: -1.1 }
+
+# ── Escalation Rules ──
+escalation:
+  enabled: true
+  repeated_negative_threshold: 2
+  risk_threshold: 0.70
+  urgent_threshold: 0.65
+  unresolved_negative_timeout_minutes: 15
+  high_risk_categories:
+    - account_compromise
+    - duplicate_payment
+    - legal_threat
+    - data_breach
+
+# ── Demo / Debug Panel ──
+demo_panel_enabled: true
+
+
