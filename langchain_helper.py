@@ -60,8 +60,13 @@ def create_vector_db():
     vectordb.save_local(VECTORDB_FILE_PATH)
 
 
-def get_qa_chain():
+def get_qa_chain(tone_instruction: str = "neutral"):
     """Return a RetrievalQA chain backed by the local FAISS index.
+
+    Args:
+        tone_instruction: One of "empathetic", "concise", or "neutral" (default).
+            Adjusts reply phrasing only — the factual content always comes from
+            the retrieved FAQ context. Never adds commitments not in the context.
 
     Automatically creates the index if it has not been built yet.
     """
@@ -79,13 +84,29 @@ def get_qa_chain():
     # Create retriever
     retriever = vectordb.as_retriever(score_threshold=0.7)
 
-    prompt_template = """Given the following context and a question, generate an answer based on this context only.
-    In the answer try to provide as much text as possible from "response" section in the source document context without making much changes.
-    If the answer is not found in the context, kindly state "I don't know." Don't try to make up an answer.
+    # ── Tone phrasing instructions (wording only; never adds un-retrieved facts) ──
+    _tone_hints = {
+        "empathetic": (
+            "The customer seems upset. Acknowledge their concern warmly before "
+            "providing the answer. Use a compassionate, understanding tone. "
+            "Do NOT add any promises or information not found in the context."
+        ),
+        "concise": (
+            "The customer needs a quick resolution. Be brief and direct. "
+            "Avoid filler phrases. Do NOT add any information not found in the context."
+        ),
+        "neutral": "",
+    }
+    tone_hint = _tone_hints.get(tone_instruction, "")
+    tone_section = f"\n    Tone guidance: {tone_hint}" if tone_hint else ""
 
-    CONTEXT: {context}
-
-    QUESTION: {question}"""
+    prompt_template = (
+        "Given the following context and a question, generate an answer based on this context only.\n"
+        "    In the answer try to provide as much text as possible from \"response\" section in the source document context without making much changes.\n"
+        "    If the answer is not found in the context, kindly state \"I don't know.\" Don't try to make up an answer."
+        + tone_section
+        + "\n\n    CONTEXT: {context}\n\n    QUESTION: {question}"
+    )
 
     PROMPT = PromptTemplate(
         template=prompt_template, input_variables=["context", "question"]
