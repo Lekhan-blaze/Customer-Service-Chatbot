@@ -1,0 +1,48 @@
+# ── Company & Locale ──
+company_timezone: "Asia/Kolkata"
+
+# ── Business Hours ──
+business_hours:
+  start: "09:00"
+  end: "18:00"
+  days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+
+next_working_day_schedule_time: "09:00"
+
+# ISO-format dates (YYYY-MM-DD) — add Indian public holidays here
+holidays: []
+
+# ── SLA Rules ──
+sla:
+  first_response_minutes: 30
+  resolution_hours: 24
+
+# ── Retention Periods ──
+retention:
+  audit_days: 90
+  session_days: 30
+
+# ── Session Timeouts ──
+session:
+  inactivity_timeout_minutes: 30
+  restore_window_hours: 24
+
+# ── Supported Languages ──
+supported_languages:
+  - English
+  - Hindi
+  - Tamil
+  - Kannada
+
+# ── Maintenance Window (daily, in company_timezone) ──
+maintenance_window:
+  start: "02:00"
+  end: "04:00"
+
+# ── Prompt-Injection Detection ──
+injection_detection:
+  enabled: true
+  threshold: 0.6
+
+# ── Job Queue ──
+job_retry_backoff_minutes: [15, 30, 60]

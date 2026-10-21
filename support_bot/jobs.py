@@ -31,21 +31,24 @@ def enqueue(
     payload: dict | None = None,
     *,
     delay_minutes: int = 0,
-    scheduled_at: str | None = None,
+    scheduled_at: str | Any | None = None,
     max_attempts: int = 4,
 ) -> int:
     """Add a job to the queue. Returns the job id.
 
     *delay_minutes* offsets from now; *scheduled_at* is an explicit ISO
-    timestamp. If both are 0/None the job is scheduled for immediate
-    execution.
+    timestamp or datetime. If both are 0/None the job is scheduled for
+    immediate execution.
     """
+    from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
-    from datetime import timedelta
 
     now = clock.now(ZoneInfo("UTC"))
     if scheduled_at:
-        sched = scheduled_at
+        if isinstance(scheduled_at, datetime):
+            sched = scheduled_at.astimezone(ZoneInfo("UTC")).isoformat()
+        else:
+            sched = str(scheduled_at)
     elif delay_minutes:
         sched = (now + timedelta(minutes=delay_minutes)).isoformat()
     else:
@@ -58,6 +61,44 @@ def enqueue(
     )
     conn.commit()
     return cur.lastrowid
+
+
+def enqueue_after_hours(
+    conn: sqlite3.Connection,
+    clock: Clock,
+    cfg: dict,
+    job_type: str,
+    payload: dict | None = None,
+    *,
+    preferred_time: str | None = None,
+    max_attempts: int = 4,
+) -> int:
+    """Schedule a job to run after hours (e.g. maintenance window)."""
+    from datetime import datetime, time, timedelta
+    from zoneinfo import ZoneInfo
+
+    tz_str = cfg.get("company_timezone", "Asia/Kolkata")
+    tz = ZoneInfo(tz_str)
+    now = clock.now(tz)
+
+    m_start = preferred_time or cfg.get("maintenance_window", {}).get("start", "02:00")
+    hour, minute = map(int, m_start.split(":"))
+    target_today = datetime.combine(now.date(), time(hour, minute), tzinfo=tz)
+
+    if now < target_today:
+        sched_dt = target_today
+    else:
+        sched_dt = target_today + timedelta(days=1)
+
+    sched_utc = sched_dt.astimezone(ZoneInfo("UTC")).isoformat()
+    return enqueue(
+        conn,
+        clock,
+        job_type,
+        payload,
+        scheduled_at=sched_utc,
+        max_attempts=max_attempts,
+    )
 
 
 def _fetch_ready(conn: sqlite3.Connection, now_iso: str) -> list[Job]:
@@ -169,3 +210,67 @@ def get_job(conn: sqlite3.Connection, job_id: int) -> Job | None:
         max_attempts=row["max_attempts"],
         last_error=row["last_error"],
     )
+
+
+class JobQueue:
+    """Service class for job queue operations."""
+
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        clock: Clock,
+        cfg: dict | None = None,
+    ):
+        self.conn = conn
+        self.clock = clock
+        self.cfg = cfg or {}
+
+    def enqueue(
+        self,
+        job_type: str,
+        payload: dict | None = None,
+        *,
+        delay_minutes: int = 0,
+        scheduled_at: str | Any | None = None,
+        max_attempts: int = 4,
+    ) -> int:
+        return enqueue(
+            self.conn,
+            self.clock,
+            job_type,
+            payload,
+            delay_minutes=delay_minutes,
+            scheduled_at=scheduled_at,
+            max_attempts=max_attempts,
+        )
+
+    def enqueue_after_hours(
+        self,
+        job_type: str,
+        payload: dict | None = None,
+        *,
+        preferred_time: str | None = None,
+        max_attempts: int = 4,
+    ) -> int:
+        return enqueue_after_hours(
+            self.conn,
+            self.clock,
+            self.cfg,
+            job_type,
+            payload,
+            preferred_time=preferred_time,
+            max_attempts=max_attempts,
+        )
+
+    def tick(
+        self,
+        handlers: dict[str, Callable[[dict | None], Any]],
+        *,
+        backoff_minutes: list[int] | None = None,
+    ) -> list[int]:
+        backoff = backoff_minutes or self.cfg.get("job_retry_backoff_minutes")
+        return tick(self.conn, self.clock, handlers, backoff_minutes=backoff)
+
+    def get(self, job_id: int) -> Job | None:
+        return get_job(self.conn, job_id)
+

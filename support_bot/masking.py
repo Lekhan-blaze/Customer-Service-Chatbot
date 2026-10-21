@@ -41,20 +41,20 @@ def mask_pii(text: str) -> str:
     if not text:
         return text
 
-    # Order matters: mask API keys first, then cards, then email, then UPI
-    # API keys
+    # Order matters:
+    # 1. API keys (high entropy, prefixes like sk-, AIza)
     text = _PATTERNS[6][1].sub("[API_KEY]", text)
-    # Card numbers
-    text = _PATTERNS[2][1].sub("[CARD]", text)
-    # IFSC
+    # 2. IFSC codes (alphanumeric pattern like HDFC0001234)
     text = _PATTERNS[4][1].sub("[IFSC]", text)
-    # Bank account with context
+    # 3. Bank account with context (e.g. Account: 1234567890) before generic cards
     text = _BANK_ACCT_CONTEXT.sub(lambda m: m.group(0).replace(m.group(1), "[BANK_ACCT]"), text)
-    # UPI IDs (before email, since UPI looks like email)
+    # 4. Card numbers (13-19 digits)
+    text = _PATTERNS[2][1].sub("[CARD]", text)
+    # 5. UPI IDs (before email, since UPI handles @upi, @okaxis etc.)
     text = _UPI_PATTERN.sub("[UPI]", text)
-    # Email
+    # 6. Email addresses
     text = _PATTERNS[0][1].sub("[EMAIL]", text)
-    # Phone
+    # 7. Phone numbers
     text = _PATTERNS[1][1].sub("[PHONE]", text)
 
     return text

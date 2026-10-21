@@ -8,6 +8,7 @@ from support_bot.audit import AuditLogger
 from support_bot.clock import Clock, SystemClock
 from support_bot.config import get_config, load_defaults
 from support_bot.db import get_connection, run_migrations
+from support_bot.jobs import JobQueue
 
 
 class Container:
@@ -28,10 +29,13 @@ class Container:
     ):
         self.clock: Clock = clock or SystemClock()
         self.conn: sqlite3.Connection = conn or get_connection(db_path)
+        self.db = self.conn
         if auto_migrate:
             run_migrations(self.conn)
         self._config_cache: dict | None = None
         self.audit = AuditLogger(self.conn, self.clock)
+        self.job_queue = JobQueue(self.conn, self.clock, self.config)
+        self.jobs = self.job_queue
 
     @property
     def config(self) -> dict:

@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS config_overrides (
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp  TEXT    NOT NULL,
-    event      TEXT    NOT NULL,
-    decision   TEXT,
-    rule       TEXT,
-    references TEXT,          -- JSON string
-    meta       TEXT,          -- JSON string for extra fields
-    created    TEXT    NOT NULL DEFAULT (datetime('now'))
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp    TEXT    NOT NULL,
+    event        TEXT    NOT NULL,
+    decision     TEXT,
+    rule         TEXT,
+    "references" TEXT,          -- JSON string
+    meta         TEXT,          -- JSON string for extra fields
+    created      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS jobs (

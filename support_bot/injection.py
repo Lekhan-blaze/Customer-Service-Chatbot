@@ -33,7 +33,7 @@ _RULES: list[tuple[str, re.Pattern, float]] = [
     (
         "data_exfil",
         re.compile(
-            r"(?:print|reveal|show|output|display|repeat)\s+(?:your|the|system)\s+"
+            r"(?:print|reveal|show|output|display|repeat)\s+(?:(?:your|the|system|internal|all)\s+)*"
             r"(?:prompt|instructions|rules|secrets|password|api.?key)",
             re.IGNORECASE,
         ),
