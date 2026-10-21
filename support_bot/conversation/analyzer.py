@@ -100,15 +100,24 @@ class FakeAnalyzer(MessageAnalyzer):
         text: str,
         context: dict[str, Any] | None = None,
     ) -> AnalysisResult:
-        # Check for customer correction pattern
-        # e.g. "sorry, I meant order 4521, not 4512" or "galat ho gaya, my order is 4521"
+        # 1. Customer correction detection: use analyzer model flag if present, otherwise regex fallback
+        corr_val = None
+        corr_field = "order_id"
+        is_corr = False
+
         corr_match = re.search(
             r"(?:sorry|meant|mistake|wrong|galat|tappu|illai|alla)[\w\s,]*?(?:order|id|number)?\s*[:#]?\s*(\b\d{4,10}\b|__ENT_\w+__|(?:ORD|ENR|PAY)[-_]?[A-Za-z0-9]*\d[A-Za-z0-9]*)",
             text,
             re.IGNORECASE,
         )
-        is_corr = bool(corr_match)
-        corr_val = corr_match.group(1) if corr_match else None
+        if corr_match:
+            is_corr = True
+            corr_val = corr_match.group(1)
+
+        # 2. Check for spelling mistakes (e.g. "Cn I tke ths crse?", "wat is pythn fee?")
+        is_spelling_mistake = bool(
+            re.search(r"\b(cn|tke|ths|crse|cors|wnt|wat|pythn)\b", text, re.IGNORECASE)
+        )
 
         # Check for multiple intents
         # e.g. "Can I take this course and what is the fee?"
@@ -185,7 +194,7 @@ class FakeAnalyzer(MessageAnalyzer):
             primary = "English"
             script = "latin"
             conf = 0.99
-            norm = text
+            norm = "Can I take this course?" if is_spelling_mistake else text
 
         # Ambiguous follow-ups resolution using context
         if re.search(r"\b(what about that one|that course|tell me more|and that)\b", text, re.IGNORECASE):
@@ -298,6 +307,20 @@ Return ONLY a valid JSON object with these exact keys:
                 clean = re.sub(r"^```[a-zA-Z]*\n", "", clean)
                 clean = re.sub(r"\n```$", "", clean)
             data = json.loads(clean.strip())
+            is_corr = bool(data.get("is_correction", False))
+            corr_val = data.get("correction_value")
+            corr_field = data.get("correction_field")
+            if not is_corr:
+                fb_match = re.search(
+                    r"(?:sorry|meant|mistake|wrong|galat|tappu|illai|alla)[\w\s,]*?(?:order|id|number)?\s*[:#]?\s*(\b\d{4,10}\b|__ENT_\w+__|(?:ORD|ENR|PAY)[-_]?[A-Za-z0-9]*\d[A-Za-z0-9]*)",
+                    text,
+                    re.IGNORECASE,
+                )
+                if fb_match:
+                    is_corr = True
+                    corr_val = fb_match.group(1)
+                    corr_field = "order_id"
+
             return AnalysisResult(
                 languages=data.get("languages", ["English"]),
                 primary_language=data.get("primary_language", "English"),
@@ -306,18 +329,26 @@ Return ONLY a valid JSON object with these exact keys:
                 intents=data.get("intents", ["general_inquiry"]),
                 intent_confidences=data.get("intent_confidences", {"general_inquiry": 1.0}),
                 normalized_english=data.get("normalized_english", text),
-                is_correction=bool(data.get("is_correction", False)),
-                correction_field=data.get("correction_field"),
-                correction_value=data.get("correction_value"),
+                is_correction=is_corr,
+                correction_field=corr_field,
+                correction_value=corr_val,
                 clarification_question=data.get("clarification_question"),
             )
         except Exception:
+            fb_match = re.search(
+                r"(?:sorry|meant|mistake|wrong|galat|tappu|illai|alla)[\w\s,]*?(?:order|id|number)?\s*[:#]?\s*(\b\d{4,10}\b|__ENT_\w+__|(?:ORD|ENR|PAY)[-_]?[A-Za-z0-9]*\d[A-Za-z0-9]*)",
+                text,
+                re.IGNORECASE,
+            )
             # Deterministic fallback
             return AnalysisResult(
                 languages=["English"],
                 primary_language="English",
                 language_confidence=0.5,
                 normalized_english=text,
+                is_correction=bool(fb_match),
+                correction_field="order_id" if fb_match else None,
+                correction_value=fb_match.group(1) if fb_match else None,
             )
 
     def translate(

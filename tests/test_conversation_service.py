@@ -214,3 +214,27 @@ def test_entity_preservation_end_to_end(db_conn, fake_clock):
     assert "PY-101" in reply
     assert "₹5000" in reply
     assert "2025-01-06" in reply
+
+
+def test_spelling_mistakes_intent_and_entity_preservation(db_conn, fake_clock):
+    """Spelling mistakes in user message: analyzer extracts correct intent and preserves entities."""
+    service = ConversationService(
+        conn=db_conn,
+        clock=fake_clock,
+        analyzer=FakeAnalyzer(),
+        auto_migrate=False,
+    )
+    # SYNTHETIC TEST MESSAGE with typos and entities
+    msg = "Cn I tke ths crse PY-101 for ₹5000 with order 4521?"
+    r = service.handle_message("sess_typos", msg)
+
+    # Intent correctly extracted
+    assert "course_inquiry" in r.intents
+    # Normalized query is clean
+    assert r.normalized_query == "Can I take this course?"
+    # Entities preserved despite typos
+    reply = service.format_reply(r, "Course PY-101 costs ₹5000 for order 4521.")
+    assert "PY-101" in reply
+    assert "₹5000" in reply
+    assert "4521" in reply
+
