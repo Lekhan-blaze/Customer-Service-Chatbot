@@ -46,3 +46,12 @@ injection_detection:
 
 # ── Job Queue ──
 job_retry_backoff_minutes: [15, 30, 60]
+
+# ── Conversation & Multilingual ──
+conversation:
+  enabled: true
+  confidence_threshold: 0.65
+  language_confidence_threshold: 0.60
+  intent_confidence_threshold: 0.60
+  max_recent_messages: 10
+

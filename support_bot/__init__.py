@@ -8,6 +8,10 @@ from support_bot.db import get_connection, run_migrations
 from support_bot.injection import InjectionResult, detect_injection
 from support_bot.jobs import Job, JobQueue, enqueue, enqueue_after_hours, get_job, tick
 from support_bot.masking import MaskingFilter, mask_pii
+from support_bot.conversation import (
+    ConversationResponse,
+    ConversationService,
+)
 from support_bot.rbac import (
     DEFAULT_ROLES,
     assign_role,
@@ -30,6 +34,8 @@ __all__ = [
     "load_defaults",
     "set_override",
     "Container",
+    "ConversationResponse",
+    "ConversationService",
     "get_connection",
     "run_migrations",
     "InjectionResult",

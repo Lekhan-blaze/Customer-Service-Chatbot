@@ -49,6 +49,26 @@ class Container:
         self._config_cache = get_config(self.conn)
         return self._config_cache
 
+    def get_conversation_service(self, analyzer=None):
+        """Return a ConversationService wired with this container's services."""
+        from support_bot.conversation.service import ConversationService
+        return ConversationService(
+            conn=self.conn,
+            clock=self.clock,
+            config=self.config,
+            audit=self.audit,
+            analyzer=analyzer,
+            auto_migrate=False,
+        )
+
+    @property
+    def conversation(self):
+        """Cached ConversationService instance."""
+        if not hasattr(self, "_conversation_service") or self._conversation_service is None:
+            self._conversation_service = self.get_conversation_service()
+        return self._conversation_service
+
     def close(self) -> None:
         """Close the database connection."""
         self.conn.close()
+
