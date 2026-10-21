@@ -49,5 +49,42 @@ The baseline project provides an interactive FAQ customer service chatbot design
 4. **Run Tests**:
    ```bash
    pip install pytest
-   pytest tests/
+   PYTHONPATH=. pytest tests/
    ```
+
+---
+
+## Internship Additions
+
+A modular, shared foundation package (`support_bot/`) was added to support upcoming features (multilingual support, human escalation, SLA tracking, audit logging, admin dashboard):
+
+### Foundation Package (`support_bot/`)
+- **Dependency Injection (`Container`)**: Simple service container supplying `clock`, `config`, `db`/`conn`, `job_queue`/`jobs`, and `audit` to modules without global state.
+- **Clock Abstraction (`Clock`, `SystemClock`, `FakeClock`)**: Deterministic time mocking in tests, plus business-hours calculations (`is_business_hours`, `next_working_day`, `add_business_time`) honoring holidays and working days.
+- **Runtime Configuration (`config/defaults.yaml` & `config_overrides`)**: Version-controlled defaults merged with runtime SQLite overrides for zero-downtime updates.
+- **Job Queue (`JobQueue`, `jobs.py`)**: SQLite-backed asynchronous queue supporting delayed, scheduled, retryable jobs with exponential/configurable backoff (`[15, 30, 60]` minutes), and after-hours execution.
+- **Structured Audit Logging (`AuditLogger`)**: JSON-structured event logging with decisions, rules, references, and metadata written to SQLite and Python logging.
+- **PII & Payment Data Masking (`mask_pii`, `MaskingFilter`)**: Sanitizes emails, phone numbers, credit cards, bank accounts, IFSC codes, UPI IDs, and API keys.
+- **Prompt-Injection Detector (`detect_injection`)**: Heuristic risk scoring for override patterns, jailbreak keywords, role hijacking, and data exfiltration.
+- **Role-Based Access Control (`rbac.py`)**: Pre-seeded roles (`viewer`, `ingestor`, `approver`, `activator`, `admin`) with a `@require_permission` decorator.
+- **Database Migrations (`db.py`, `migrations/`)**: Forward-only SQLite migrations with WAL mode and foreign key enforcement.
+
+### Configuration (`config/defaults.yaml`)
+Key configurations include:
+- `company_timezone`: `Asia/Kolkata`
+- `business_hours`: `09:00` - `18:00` (Mon–Fri)
+- `next_working_day_schedule_time`: `09:00`
+- `holidays`: Configurable list of ISO date strings
+- `sla`: First response (30 min), resolution (24 hours)
+- `retention`: Audit logs (90 days), sessions (30 days)
+- `session`: Inactivity timeout (30 min), restore window (24 hours)
+- `supported_languages`: English, Hindi, Tamil, Kannada
+- `maintenance_window`: `02:00` - `04:00`
+- `injection_detection`: Enabled with threshold `0.6`
+- `job_retry_backoff_minutes`: `[15, 30, 60]`
+
+### How to Run Tests
+```bash
+PYTHONPATH=. pytest tests/ -v
+```
+The test suite includes 57 automated tests covering the baseline Q&A flow (mocked LLM), FakeClock timing, configuration overrides, audit logging, PII masking, injection detection, RBAC permissions, and job retries.
