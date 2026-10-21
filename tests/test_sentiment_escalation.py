@@ -637,6 +637,179 @@ class TestSentimentEscalationService:
         ).fetchone()
         assert job_after is None
 
+    # ── 15-minute Rule FakeClock Tests ─────────────────────────────────────────
+
+    def test_one_negative_message_then_16_minutes_escalates(self):
+        """One negative message, then 16 minutes -> escalates via unresolved_negativity_timeout."""
+        clock = FakeClock(_IN_HOURS)
+        analyzer = FakeSentimentAnalyzer(
+            default_result=SentimentResult(
+                calibrated_scores={"frustrated": 0.85, "negative": 0.80},
+                dominant_label="frustrated",
+            )
+        )
+        svc = self._service(clock, analyzer)
+        sess = "sess_timeout_16"
+
+        # 1st negative message at t=0
+        _, record, _ = svc.process_message(sess, "I am really annoyed with this course!")
+        assert record is None, "First negative message should not immediately escalate under repeated_negative"
+
+        # Advance 16 minutes
+        clock.advance(minutes=16)
+        processed = svc.process_due_jobs()
+        assert len(processed) >= 1
+
+        records = svc.get_escalations(sess)
+        timeout_records = [r for r in records if r.rule_name == "unresolved_negativity_timeout"]
+        assert len(timeout_records) == 1
+        assert timeout_records[0].routing_outcome == "human_queue"
+        assert timeout_records[0].status == "pending"
+
+    def test_resolved_at_10_minutes_no_escalation(self):
+        """Negative message, then resolved at 10 minutes -> timeout job cancelled, no escalation at 16 minutes."""
+        clock = FakeClock(_IN_HOURS)
+        neg_analyzer = FakeSentimentAnalyzer(
+            default_result=SentimentResult(
+                calibrated_scores={"negative": 0.85},
+                dominant_label="negative",
+            )
+        )
+        svc = self._service(clock, neg_analyzer)
+        sess = "sess_resolve_10"
+
+        # Negative message at t=0
+        svc.process_message(sess, "This does not work!")
+
+        # Advance 10 minutes and customer resolves concern
+        clock.advance(minutes=10)
+        pos_analyzer = FakeSentimentAnalyzer(
+            default_result=SentimentResult(
+                calibrated_scores={"positive": 0.90, "neutral": 0.10},
+                dominant_label="positive",
+            )
+        )
+        svc.analyzer = pos_analyzer
+        svc.process_message(sess, "Thank you, that solved it! Perfectly clear now.")
+
+        # Advance past the 15-minute window (to 16 minutes)
+        clock.advance(minutes=6)
+        processed = svc.process_due_jobs()
+        assert len(processed) == 0, "No pending timeout jobs should be ready"
+
+        records = svc.get_escalations(sess)
+        pending_records = [r for r in records if r.status == "pending"]
+        assert len(pending_records) == 0, "Resolved session must have no pending escalations"
+
+    def test_no_duplicate_escalation_if_repeated_negative_also_fires(self):
+        """No duplicate escalation if both repeated-negative and timeout rule trigger."""
+        clock = FakeClock(_IN_HOURS)
+        analyzer = FakeSentimentAnalyzer(
+            default_result=SentimentResult(
+                calibrated_scores={"frustrated": 0.85, "negative": 0.80},
+                dominant_label="frustrated",
+            )
+        )
+        svc = self._service(clock, analyzer)
+        sess = "sess_no_dup"
+
+        # 1st negative at t=0
+        svc.process_message(sess, "Issue 1 - unhappy")
+
+        # 2nd negative at t=5 -> repeated_negative rule fires
+        clock.advance(minutes=5)
+        _, r2, _ = svc.process_message(sess, "Issue 2 - still unhappy")
+        assert r2 is not None
+        assert r2.rule_name == "repeated_negative"
+
+        # Advance to 16 minutes (timeout job fires)
+        clock.advance(minutes=11)
+        svc.process_due_jobs()
+
+        records = svc.get_escalations(sess)
+        pending = [r for r in records if r.status == "pending"]
+        # Must only have exactly 1 open escalation record (no duplicate)
+        assert len(pending) == 1
+        assert pending[0].rule_name == "repeated_negative"
+
+    # ── Escalation Record Schema Verification ──────────────────────────────────
+
+    def test_escalation_record_stored_fields(self):
+        """Verify that every required field is present in the escalation record and table."""
+        clock = FakeClock(_OUT_HOURS)
+        analyzer = FakeSentimentAnalyzer(
+            default_result=SentimentResult(
+                calibrated_scores={"negative": 0.90, "urgent": 0.85},
+                dominant_label="negative",
+                risk_category="duplicate_payment",
+                risk_score=0.95,
+            )
+        )
+        svc = self._service(clock, analyzer)
+        sess = "sess_fields_check"
+
+        _, record, _ = svc.process_message(
+            sess,
+            "I was charged twice for the course! Please fix this.",
+            context={"summary": "User reports double debit of tuition fee"},
+        )
+        assert record is not None
+
+        # Verify in-memory record has all fields populated
+        assert record.id is not None
+        assert record.session_id == sess
+        assert "duplicate_payment" in record.reason
+        assert record.rule_name == "high_risk_category"
+        assert record.calibrated_scores.get("negative") == 0.90
+        assert record.conversation_summary == "User reports double debit of tuition fee"
+        assert len(record.message_refs) > 0
+        assert record.routing_outcome == "on_call"
+        assert record.status == "pending"
+        assert record.created_at is not None
+        assert record.customer_message is not None
+
+        # Verify raw database row has all matching columns
+        row = self.db.execute(
+            "SELECT * FROM escalation_records WHERE id = ?", (record.id,)
+        ).fetchone()
+        assert row is not None
+        keys = row.keys()
+        for expected in [
+            "id",
+            "session_id",
+            "reason",
+            "rule_name",
+            "calibrated_scores",
+            "conversation_summary",
+            "message_refs",
+            "routing_outcome",
+            "status",
+            "created_at",
+            "resolved_at",
+            "customer_message",
+        ]:
+            assert expected in keys, f"Column {expected} missing from escalation_records"
+
+    # ── Customer-facing Escalation Message Safety ──────────────────────────────
+
+    def test_customer_facing_message_makes_no_unsupported_promises(self):
+        """Escalation messages must make no promises about outcomes, refunds or timing beyond config."""
+        clock = FakeClock(_IN_HOURS)
+        svc = self._service(clock)
+
+        for routing in ["on_call", "human_queue", "scheduled_next_working_day"]:
+            msg = svc._customer_message(routing)
+            msg_lower = msg.lower()
+            assert len(msg) > 0
+            # No promises about refund or financial outcomes
+            assert "refund" not in msg_lower
+            assert "money back" not in msg_lower
+            assert "guarantee" not in msg_lower
+            assert "compensation" not in msg_lower
+            # No arbitrary timing promises (e.g. within 5 minutes, 1 hour)
+            assert "within" not in msg_lower
+
+
     # ── Escalation disabled ────────────────────────────────────────────────────
 
     def test_escalation_disabled_no_records(self):

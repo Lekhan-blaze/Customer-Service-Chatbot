@@ -8,14 +8,18 @@ prints per-label accuracy and reliability/ECE numbers, and updates config/defaul
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import sys
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 import yaml
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 from support_bot.sentiment.calibration import compute_ece, platt_scale
 
-ROOT = Path(__file__).resolve().parent.parent
 DATA_PATH = ROOT / "tests" / "data" / "sentiment_validation.json"
 CONFIG_PATH = ROOT / "config" / "defaults.yaml"
 

@@ -9,3 +9,6 @@ faiss-cpu
 sentence-transformers
 torch
 torchvision
+pyyaml
+pytest
+scikit-learn

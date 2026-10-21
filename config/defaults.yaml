@@ -1,89 +1,79 @@
-# ── Company & Locale ──
-company_timezone: "Asia/Kolkata"
-
-# ── Business Hours ──
+company_timezone: Asia/Kolkata
 business_hours:
-  start: "09:00"
-  end: "18:00"
-  days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
-
-next_working_day_schedule_time: "09:00"
-
-# ISO-format dates (YYYY-MM-DD) — add Indian public holidays here
+  start: 09:00
+  end: '18:00'
+  days:
+  - Mon
+  - Tue
+  - Wed
+  - Thu
+  - Fri
+next_working_day_schedule_time: 09:00
 holidays: []
-
-# ── SLA Rules ──
 sla:
   first_response_minutes: 30
   resolution_hours: 24
-
-# ── Retention Periods ──
 retention:
   audit_days: 90
   session_days: 30
-
-# ── Session Timeouts ──
 session:
   inactivity_timeout_minutes: 30
   restore_window_hours: 24
-
-# ── Supported Languages ──
 supported_languages:
-  - English
-  - Hindi
-  - Tamil
-  - Kannada
-
-# ── Maintenance Window (daily, in company_timezone) ──
+- English
+- Hindi
+- Tamil
+- Kannada
 maintenance_window:
-  start: "02:00"
-  end: "04:00"
-
-# ── Prompt-Injection Detection ──
+  start: 02:00
+  end: 04:00
 injection_detection:
   enabled: true
   threshold: 0.6
-
-# ── Job Queue ──
-job_retry_backoff_minutes: [15, 30, 60]
-
-# ── Conversation & Multilingual ──
+job_retry_backoff_minutes:
+- 15
+- 30
+- 60
 conversation:
   enabled: true
   confidence_threshold: 0.65
-  language_confidence_threshold: 0.60
-  intent_confidence_threshold: 0.60
+  language_confidence_threshold: 0.6
+  intent_confidence_threshold: 0.6
   max_recent_messages: 10
-
-# ── Sentiment Analysis ──
 sentiment:
-  sarcasm_threshold: 0.60
+  sarcasm_threshold: 0.6
   recent_messages_count: 5
   low_confidence_threshold: 0.45
   calibration:
     enabled: true
     weights:
-      positive: { a: 2.1, b: -0.8 }
-      neutral: { a: 1.8, b: -0.4 }
-      negative: { a: 2.2, b: -0.7 }
-      frustrated: { a: 2.3, b: -0.9 }
-      urgent: { a: 2.4, b: -1.0 }
-      sarcastic: { a: 2.5, b: -1.1 }
-
-# ── Escalation Rules ──
+      positive:
+        a: 3.6231
+        b: -2.8442
+      neutral:
+        a: 4.2431
+        b: -2.0357
+      negative:
+        a: 4.2241
+        b: -2.0304
+      frustrated:
+        a: 4.0031
+        b: -2.4836
+      urgent:
+        a: 3.6086
+        b: -2.7975
+      sarcastic:
+        a: 2.9365
+        b: -3.0944
 escalation:
   enabled: true
   repeated_negative_threshold: 2
-  risk_threshold: 0.70
+  risk_threshold: 0.7
   urgent_threshold: 0.65
   unresolved_negative_timeout_minutes: 15
   high_risk_categories:
-    - account_compromise
-    - duplicate_payment
-    - legal_threat
-    - data_breach
-
-# ── Demo / Debug Panel ──
+  - account_compromise
+  - duplicate_payment
+  - legal_threat
+  - data_breach
 demo_panel_enabled: true
-
-
