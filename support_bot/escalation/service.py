@@ -3,23 +3,36 @@
 Rules (evaluated in priority order):
 1. High-risk category detected (account_compromise, duplicate_payment, legal_threat, data_breach)
    → immediate escalation → on-call queue if outside business hours, else human queue
-2. N consecutive messages with negative/frustrated dominant label
-   → escalate → on-call if urgent+outside hours, else schedule next working day if outside hours
-3. Urgent sentiment outside business hours → on-call queue
-4. 15-minute unresolved-negativity timeout (job-queue based)
-   → escalated with rule "unresolved_negativity_timeout"
-5. Low-confidence sentiment → ask clarification, do not escalate (idempotent)
+2. Urgent sentiment outside business hours → on-call queue
+3. N consecutive messages with negative/frustrated dominant label → human queue (in hours)
+   or schedule next working day (outside hours)
+4. Negative sentiment outside business hours → schedule next working day
+5. 15-minute unresolved-negativity timeout — scheduled at the FIRST negative/frustrated
+   message in a conversation (not when repeated-negative fires). Cancelled when the
+   conversation is "resolved" (see _is_resolved below).
+
+Definition of "resolved" (cancels the timeout job and any open repeated_negative escalation):
+  - A later positive or neutral dominant-label message from the customer, OR
+  - An explicit customer confirmation (intent "confirmed" or text matching confirmation
+    keywords), OR
+  - A call to resolve_escalation() from application code (e.g., agent marks it resolved).
 
 Idempotency: an open (non-resolved) escalation for the same session and rule
 is never duplicated.
+
+Customer-facing messages (customer_message field):
+  Make no promises about outcomes, refunds, or timings beyond what the config allows.
+  They only acknowledge the concern and state that a team member will follow up.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from support_bot.audit import AuditLogger
 from support_bot.clock import Clock, SystemClock, is_business_hours, next_working_day
@@ -28,6 +41,32 @@ from support_bot.db import get_connection, run_migrations
 from support_bot.jobs import JobQueue
 from support_bot.masking import mask_pii
 from support_bot.sentiment.analyzer import SentimentAnalyzer, SentimentResult
+
+# Keywords that signal customer confirmation / resolution
+_CONFIRMATION_PATTERN = re.compile(
+    r"\b(thank you|thanks|got it|perfect|resolved|okay|ok|understood|great|sorted)\b",
+    re.IGNORECASE,
+)
+
+# Labels considered "negative" for the timer and repeated-negative rule
+_NEGATIVE_LABELS = frozenset(["negative", "frustrated"])
+
+# Labels considered "positive/resolved"
+_POSITIVE_LABELS = frozenset(["positive", "neutral"])
+
+
+def _is_resolved(sentiment: SentimentResult, text: str) -> bool:
+    """Return True if this message signals that the customer's concern is resolved.
+
+    Criteria:
+      1. Dominant label is positive or neutral, OR
+      2. Text matches explicit confirmation keywords.
+    """
+    if sentiment.dominant_label in _POSITIVE_LABELS:
+        return True
+    if _CONFIRMATION_PATTERN.search(text):
+        return True
+    return False
 
 
 @dataclass
@@ -42,9 +81,10 @@ class EscalationRecord:
     conversation_summary: str
     message_refs: list[str]
     routing_outcome: str  # human_queue | on_call | scheduled_next_working_day
-    status: str  # pending | in_progress | resolved
+    status: str           # pending | in_progress | resolved
     created_at: str
     resolved_at: str | None = None
+    customer_message: str | None = None
 
 
 def _load_escalations(
@@ -77,6 +117,7 @@ def _load_escalations(
                 status=r["status"],
                 created_at=r["created_at"],
                 resolved_at=r["resolved_at"],
+                customer_message=r["customer_message"] if "customer_message" in r.keys() else None,
             )
         )
     return result
@@ -132,7 +173,19 @@ class SentimentEscalationService:
         if sentiment.low_confidence or max(sentiment.calibrated_scores.values(), default=0.0) < low_conf_threshold:
             return sentiment, None, self._clarification_question(text)
 
-        # Evaluate rules
+        # If this message signals resolution: cancel timer, resolve open escalations
+        if _is_resolved(sentiment, text):
+            self.cancel_timeout_job(session_id)
+            self.resolve_escalation(session_id, rule_name="repeated_negative")
+            self.resolve_escalation(session_id, rule_name="unresolved_negativity_timeout")
+
+        # 15-minute timer: start at FIRST negative/frustrated message
+        if sentiment.dominant_label in _NEGATIVE_LABELS:
+            cfg_esc = self.config.get("escalation", {})
+            timeout_minutes = cfg_esc.get("unresolved_negative_timeout_minutes", 15)
+            self._schedule_timeout_job(session_id, timeout_minutes)
+
+        # Evaluate escalation rules
         escalation = self._evaluate_rules(session_id, text, sentiment, context)
         return sentiment, escalation, None
 
@@ -179,6 +232,98 @@ class SentimentEscalationService:
             (session_id,),
         )
         self.conn.commit()
+
+    def handle_timeout_job(self, payload: dict | None) -> EscalationRecord | None:
+        """Handler for 'unresolved_negativity_timeout' job.
+
+        Triggered when 15 minutes have passed since the first negative message
+        without resolution. Idempotent: does not duplicate if repeated_negative
+        or another timeout escalation is already open.
+        """
+        if not payload or "session_id" not in payload:
+            return None
+        session_id = payload["session_id"]
+
+        existing_open = _load_escalations(self.conn, session_id, status_filter="pending")
+        existing_open += _load_escalations(self.conn, session_id, status_filter="in_progress")
+        if any(
+            r.rule_name in ("unresolved_negativity_timeout", "repeated_negative")
+            for r in existing_open
+        ):
+            return None
+
+        # Check latest sentiment in database
+        latest = self.conn.execute(
+            "SELECT dominant_label, message_text FROM message_sentiment "
+            "WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+
+        if not latest or latest["dominant_label"] not in _NEGATIVE_LABELS:
+            return None  # Conversation was resolved or no negative message
+
+        # Escalate
+        in_hours = is_business_hours(self.clock, self.config)
+        routing = "human_queue" if in_hours else "scheduled_next_working_day"
+        msg = self._customer_message(routing)
+
+        rows = self.conn.execute(
+            "SELECT message_text FROM message_sentiment WHERE session_id = ? ORDER BY id ASC",
+            (session_id,),
+        ).fetchall()
+        texts = [r["message_text"] for r in rows]
+        summary = "Negative sentiment remained unresolved for 15 minutes."
+
+        cal_json = json.dumps({"negative": 0.8, "frustrated": 0.8})
+        refs_json = json.dumps([mask_pii(t[:200]) for t in texts[-5:]])
+        now = self.clock.now(ZoneInfo("UTC")).isoformat()
+
+        cur = self.conn.execute(
+            "INSERT INTO escalation_records "
+            "(session_id, reason, rule_name, calibrated_scores, conversation_summary, "
+            " message_refs, routing_outcome, status, created_at, customer_message) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+            (
+                session_id,
+                "Negative sentiment unresolved for 15 minutes",
+                "unresolved_negativity_timeout",
+                cal_json,
+                summary,
+                refs_json,
+                routing,
+                now,
+                msg,
+            ),
+        )
+        self.conn.commit()
+        record_id = cur.lastrowid
+        self.audit.log(
+            "escalation_created",
+            decision="escalate",
+            rule="unresolved_negativity_timeout",
+            session_id=session_id,
+            routing_outcome=routing,
+        )
+        return EscalationRecord(
+            id=record_id,
+            session_id=session_id,
+            reason="Negative sentiment unresolved for 15 minutes",
+            rule_name="unresolved_negativity_timeout",
+            calibrated_scores={"negative": 0.8, "frustrated": 0.8},
+            conversation_summary=summary,
+            message_refs=texts[-5:],
+            routing_outcome=routing,
+            status="pending",
+            created_at=now,
+            customer_message=msg,
+        )
+
+    def process_due_jobs(self) -> list[int]:
+        """Process any pending jobs that are due according to the clock."""
+        handlers = {
+            "unresolved_negativity_timeout": self.handle_timeout_job,
+        }
+        return self._jobs.tick(handlers)
 
     # ──────────────────────────────────────────────────────────
     # Internal helpers
@@ -231,7 +376,6 @@ class SentimentEscalationService:
         risk_threshold = cfg_esc.get("risk_threshold", 0.70)
         neg_threshold = cfg_esc.get("repeated_negative_threshold", 2)
         urgent_threshold = cfg_esc.get("urgent_threshold", 0.65)
-        timeout_minutes = cfg_esc.get("unresolved_negative_timeout_minutes", 15)
 
         # Rule 1: High-risk category
         if (
@@ -239,14 +383,13 @@ class SentimentEscalationService:
             and sentiment.risk_score >= risk_threshold
         ):
             routing = "on_call" if not in_hours else "human_queue"
+            msg = self._customer_message(routing)
             return self._escalate(
-                session_id,
-                text,
-                sentiment,
-                context,
+                session_id, text, sentiment, context,
                 reason=f"High-risk category detected: {sentiment.risk_category} (score={sentiment.risk_score:.2f})",
                 rule_name="high_risk_category",
                 routing=routing,
+                customer_message=msg,
             )
 
         # Rule 2: Urgent outside business hours
@@ -254,44 +397,37 @@ class SentimentEscalationService:
             sentiment.calibrated_scores.get("urgent", 0.0) >= urgent_threshold
             and not in_hours
         ):
+            msg = self._customer_message("on_call")
             return self._escalate(
-                session_id,
-                text,
-                sentiment,
-                context,
+                session_id, text, sentiment, context,
                 reason="Urgent message received outside business hours",
                 rule_name="urgent_outside_hours",
                 routing="on_call",
+                customer_message=msg,
             )
 
         # Rule 3: Repeated negative/frustrated messages
         n_negative = self._count_recent_negative(session_id, n=neg_threshold)
         if n_negative >= neg_threshold:
             routing = "scheduled_next_working_day" if not in_hours else "human_queue"
-            record = self._escalate(
-                session_id,
-                text,
-                sentiment,
-                context,
+            msg = self._customer_message(routing)
+            return self._escalate(
+                session_id, text, sentiment, context,
                 reason=f"Repeated negative sentiment: {n_negative} consecutive messages",
                 rule_name="repeated_negative",
                 routing=routing,
+                customer_message=msg,
             )
-            # Schedule unresolved-negativity timeout job
-            if record:
-                self._schedule_timeout_job(session_id, timeout_minutes)
-            return record
 
         # Rule 4: Outside business hours (non-urgent) — schedule next working day
-        if not in_hours and sentiment.dominant_label in ("negative", "frustrated"):
+        if not in_hours and sentiment.dominant_label in _NEGATIVE_LABELS:
+            msg = self._customer_message("scheduled_next_working_day")
             return self._escalate(
-                session_id,
-                text,
-                sentiment,
-                context,
+                session_id, text, sentiment, context,
                 reason="Negative sentiment outside business hours",
                 rule_name="negative_outside_hours",
                 routing="scheduled_next_working_day",
+                customer_message=msg,
             )
 
         return None
@@ -305,13 +441,19 @@ class SentimentEscalationService:
         reason: str,
         rule_name: str,
         routing: str,
+        customer_message: str | None = None,
     ) -> EscalationRecord | None:
         """Idempotent — skips if open escalation for same session+rule exists."""
         existing = _load_escalations(self.conn, session_id, status_filter="pending")
         existing += _load_escalations(self.conn, session_id, status_filter="in_progress")
         for e in existing:
             if e.rule_name == rule_name:
-                return e  # already escalated
+                return e  # already escalated under this rule
+            if rule_name in ("repeated_negative", "unresolved_negativity_timeout") and e.rule_name in (
+                "repeated_negative",
+                "unresolved_negativity_timeout",
+            ):
+                return e  # already escalated under negativity
 
         from zoneinfo import ZoneInfo
         now = self.clock.now(ZoneInfo("UTC")).isoformat()
@@ -322,9 +464,9 @@ class SentimentEscalationService:
         cur = self.conn.execute(
             "INSERT INTO escalation_records "
             "(session_id, reason, rule_name, calibrated_scores, conversation_summary, "
-            " message_refs, routing_outcome, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
-            (session_id, reason, rule_name, cal_json, summary, refs_json, routing, now),
+            " message_refs, routing_outcome, status, created_at, customer_message) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+            (session_id, reason, rule_name, cal_json, summary, refs_json, routing, now, customer_message),
         )
         self.conn.commit()
         row_id = cur.lastrowid
@@ -348,6 +490,7 @@ class SentimentEscalationService:
             routing_outcome=routing,
             status="pending",
             created_at=now,
+            customer_message=customer_message,
         )
 
     def _count_recent_negative(self, session_id: str, n: int) -> int:
@@ -358,22 +501,46 @@ class SentimentEscalationService:
             (session_id, n),
         ).fetchall()
         if len(rows) < n:
-            return len([r for r in rows if r["dominant_label"] in ("negative", "frustrated")])
-        return sum(1 for r in rows if r["dominant_label"] in ("negative", "frustrated"))
+            return len([r for r in rows if r["dominant_label"] in _NEGATIVE_LABELS])
+        return sum(1 for r in rows if r["dominant_label"] in _NEGATIVE_LABELS)
 
     def _schedule_timeout_job(self, session_id: str, timeout_minutes: int) -> None:
-        """Schedule a timeout escalation job if one is not already pending."""
+        """Schedule timeout escalation job if one is not already pending.
+
+        Called at the FIRST negative/frustrated message in a conversation.
+        """
         existing = self.conn.execute(
             "SELECT id FROM jobs WHERE job_type='unresolved_negativity_timeout' "
             "AND status='pending' AND json_extract(payload,'$.session_id')=?",
             (session_id,),
         ).fetchone()
         if existing:
-            return
+            return  # already scheduled — don't reschedule
         self._jobs.enqueue(
             "unresolved_negativity_timeout",
             payload={"session_id": session_id},
             delay_minutes=timeout_minutes,
+        )
+
+    def _customer_message(self, routing: str) -> str:
+        """Safe customer-facing escalation message. No outcome promises, no timings."""
+        msgs = {
+            "on_call": (
+                "We've noted your concern and a team member will look into it. "
+                "We aim to follow up as quickly as we can."
+            ),
+            "human_queue": (
+                "We've noted your concern and it has been passed to our support team. "
+                "Someone will be in touch with you."
+            ),
+            "scheduled_next_working_day": (
+                "We've noted your concern. Our team is currently outside working hours "
+                "and will follow up on the next working day."
+            ),
+        }
+        return msgs.get(
+            routing,
+            "We've noted your concern and will follow up with you.",
         )
 
     def _clarification_question(self, text: str) -> str:
