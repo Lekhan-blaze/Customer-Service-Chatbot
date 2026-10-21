@@ -1,0 +1,20 @@
+# Environment and secrets
+.env
+.streamlit/secrets.toml
+
+# Virtual environments
+venv/
+.venv/
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# macOS system files
+.DS_Store
+
+# Local vector index folders
+faiss_index/
