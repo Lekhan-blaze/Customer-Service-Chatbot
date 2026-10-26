@@ -271,6 +271,10 @@ class JobQueue:
         backoff = backoff_minutes or self.cfg.get("job_retry_backoff_minutes")
         return tick(self.conn, self.clock, handlers, backoff_minutes=backoff)
 
+    def run_due(self, handlers: dict[str, Callable[[dict | None], Any]] | None = None) -> list[int]:
+        """Convenience alias to process ready jobs with handlers."""
+        return self.tick(handlers or {})
+
     def get(self, job_id: int) -> Job | None:
         return get_job(self.conn, job_id)
 

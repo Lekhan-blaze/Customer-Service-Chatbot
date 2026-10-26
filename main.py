@@ -49,8 +49,11 @@ esc_svc = SentimentEscalationService(conn=conn, clock=clock, config=cfg, auto_mi
 
 # Make sure process_due_jobs() runs on each rerun
 esc_svc.process_due_jobs()
-file_svc.job_queue.tick(file_svc.get_job_handlers())
-container.job_queue.run_due()
+all_handlers = {}
+all_handlers.update(file_svc.get_job_handlers())
+if hasattr(kb_pipeline, "get_job_handlers"):
+    all_handlers.update(kb_pipeline.get_job_handlers())
+container.job_queue.tick(all_handlers)
 
 # ── Knowledgebase builder (Baseline) ───────────────────────────────────────────
 col_kb_btn, col_kb_status = st.columns([1, 2])
@@ -332,9 +335,12 @@ if demo_enabled:
         st.subheader("⚙️ Background Jobs")
         if st.button("▶️ Run due jobs"):
             due_esc = esc_svc.process_due_jobs()
-            due_file = file_svc.job_queue.tick(file_svc.get_job_handlers())
-            due_kb = container.job_queue.run_due()
-            total_jobs = len(due_esc) + len(due_file) + len(due_kb)
+            all_handlers = {}
+            all_handlers.update(file_svc.get_job_handlers())
+            if hasattr(kb_pipeline, "get_job_handlers"):
+                all_handlers.update(kb_pipeline.get_job_handlers())
+            due_jobs = container.job_queue.tick(all_handlers)
+            total_jobs = len(due_esc) + len(due_jobs)
             st.success(f"Processed {total_jobs} background/escalation job(s).")
             st.rerun()
 

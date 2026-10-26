@@ -691,6 +691,15 @@ class KnowledgePipeline:
             for r in rows
         ]
 
+    def get_job_handlers(self) -> Dict[str, Callable[[dict | None], Any]]:
+        """Return handlers for background jobs enqueued by KnowledgePipeline."""
+        return {
+            "activate_kb_version": lambda p: self.activate_version(
+                version_id=p["version_id"], actor=p.get("actor", "job_queue"), force=True
+            ),
+            "retry_kb_update": lambda p: self.build_version(p["version_id"]),
+        }
+
     def get_metrics(self) -> Dict[str, Any]:
         """Return operational pipeline metrics."""
         docs_count = self.conn.execute("SELECT count(*) as c FROM kb_documents").fetchone()["c"]
