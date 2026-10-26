@@ -68,8 +68,8 @@ sentiment:
         b: -2.7975
         enabled: true
       sarcastic:
-        a: 2.9365
-        b: -3.0944
+        a: 2.5
+        b: -1.1
         enabled: true
 escalation:
   enabled: true
