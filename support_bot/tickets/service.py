@@ -85,7 +85,19 @@ class TicketService:
 
         t_data = ext_res.ticket_data
 
-        # 2. Priority calculation
+        # 2. Load stored escalation record if available
+        if escalation_data is None and session_id:
+            try:
+                row = self.conn.execute(
+                    "SELECT * FROM escalation_records WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+                    (session_id,)
+                ).fetchone()
+                if row:
+                    escalation_data = dict(row)
+            except Exception:
+                pass
+
+        # Priority calculation
         priority = calculate_ticket_priority(
             issue_type=t_data["issue_type"],
             sentiment_data=sentiment_data,

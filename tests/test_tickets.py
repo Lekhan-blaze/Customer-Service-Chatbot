@@ -270,3 +270,72 @@ def test_masked_handoff_summary(ticket_env):
     # Email and phone masked
     assert "helen@example.com" not in handoff.masked_summary
     assert "555-123-4567" not in handoff.masked_summary
+
+
+def test_after_hours_routing_on_call_and_next_working_day(ticket_env):
+    """Tickets created outside business hours route to on-call (P1) or next-working-day per config."""
+    svc: TicketService = ticket_env["svc"]
+    clock: FakeClock = ticket_env["clock"]
+    # Sunday at 11:00 PM IST (outside business hours: Mon-Fri 09:00-18:00)
+    sunday_night = datetime(2026, 4, 19, 23, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
+    clock.set(sunday_night)
+
+    # 1. Critical P1 ticket after hours routes to on-call queue
+    p1_messages = [
+        {"sender": "user", "text": "I am Alice. Order ORD-999 for Machine Learning was charged twice on duplicate payment! Urgent help."},
+    ]
+    t1, _ = svc.create_ticket_from_conversation("sess_after_p1", p1_messages)
+    assert t1 is not None
+    assert t1.priority == TicketPriority.P1
+    assert t1.assigned_team == "on_call"
+
+    # 2. Non-P1 ticket after hours with after_hours_queue config routes to next_working_day
+    ticket_env["config"]["tickets"]["after_hours_queue"] = "next_working_day"
+    p3_messages = [
+        {"sender": "user", "text": "I am Bob. Order ORD-888 for Web Dev course has video buffering errors."},
+    ]
+    t2, _ = svc.create_ticket_from_conversation("sess_after_p3", p3_messages)
+    assert t2 is not None
+    assert t2.priority == TicketPriority.P3
+    assert t2.assigned_team == "next_working_day"
+
+
+def test_priority_calculation_from_severity_sentiment_wait_time_and_impact(ticket_env):
+    """Test priority calculation from severity, stored escalation sentiment, wait time and impact."""
+    from support_bot.tickets.priority import calculate_ticket_priority
+    svc: TicketService = ticket_env["svc"]
+    conn = ticket_env["conn"]
+
+    # 1. Customer impact
+    p_widespread = calculate_ticket_priority("platform_down", customer_impact="widespread")
+    assert p_widespread == TicketPriority.P1
+
+    p_high_impact = calculate_ticket_priority("video_error", customer_impact="high")
+    assert p_high_impact == TicketPriority.P2
+
+    # 2. Wait time elevation
+    p_long_wait = calculate_ticket_priority("general_query", wait_time_minutes=130)
+    assert p_long_wait == TicketPriority.P1
+
+    p_med_wait = calculate_ticket_priority("general_query", wait_time_minutes=70)
+    assert p_med_wait == TicketPriority.P2
+
+    # 3. Explicit severity
+    p_crit = calculate_ticket_priority("inquiry", severity="critical")
+    assert p_crit == TicketPriority.P1
+
+    # 4. Stored escalation records in database
+    conn.execute(
+        "INSERT INTO escalation_records (session_id, reason, rule_name, routing_outcome, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        ("sess_stored_esc", "duplicate_payment detected", "high_risk_financial", "on_call", "2026-04-15T10:00:00")
+    )
+    conn.commit()
+
+    messages = [
+        {"sender": "user", "text": "My name is Charlie. Order ORD-777 for Cloud course invoice details."},
+    ]
+    # create_ticket_from_conversation automatically queries stored escalation record
+    t, _ = svc.create_ticket_from_conversation("sess_stored_esc", messages)
+    assert t is not None
+    assert t.priority == TicketPriority.P1

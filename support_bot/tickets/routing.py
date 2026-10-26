@@ -17,7 +17,9 @@ def route_ticket(
     - skills: list of matching issue types/keywords
     - available: boolean flag
     - current_workload < max_workload
-    If after-hours or no team available/under capacity, routes to fallback queue.
+    If outside business hours:
+    - P1 routes to on_call queue (or configured p1_queue)
+    - P2-P4 routes to next-working-day queue if configured, or falls back.
     """
     ticket_cfg = config.get("tickets", {})
     teams = ticket_cfg.get("teams", {})
@@ -28,10 +30,18 @@ def route_ticket(
     if clock is not None:
         in_hours = is_business_hours(clock, config)
 
-    # If priority is P1 and outside business hours, can route to on_call or escalation team
-    if not in_hours and priority == TicketPriority.P1:
-        if "on_call" in teams and teams["on_call"].get("available", True):
-            return "on_call"
+    # Outside business hours routing
+    if not in_hours:
+        after_hours_cfg = ticket_cfg.get("after_hours", {})
+        # If P1, route to on-call
+        if priority == TicketPriority.P1:
+            on_call_target = after_hours_cfg.get("p1_queue", "on_call")
+            return on_call_target
+        
+        # P2-P4 route to next_working_day or configured after-hours queue
+        after_hours_queue = after_hours_cfg.get("default_queue") or ticket_cfg.get("after_hours_queue")
+        if after_hours_queue:
+            return after_hours_queue
 
     best_team = None
 
