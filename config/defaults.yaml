@@ -50,25 +50,38 @@ sentiment:
       positive:
         a: 3.6231
         b: -2.8442
+        enabled: true
       neutral:
-        a: 4.2431
-        b: -2.0357
+        a: 1.0
+        b: 0.0
+        enabled: false
       negative:
-        a: 4.2241
-        b: -2.0304
+        a: 1.0
+        b: 0.0
+        enabled: false
       frustrated:
-        a: 4.0031
-        b: -2.4836
+        a: 1.0
+        b: 0.0
+        enabled: false
       urgent:
         a: 3.6086
         b: -2.7975
+        enabled: true
       sarcastic:
         a: 2.9365
         b: -3.0944
+        enabled: true
 escalation:
   enabled: true
   repeated_negative_threshold: 2
-  risk_threshold: 0.7
+  risk_threshold: 0.6
+  risk_thresholds:
+    account_compromise: 0.7
+    duplicate_payment: 0.45
+    legal_threat: 0.45
+    data_breach: 0.6
+    default: 0.6
+  risk_clarification_min: 0.3
   urgent_threshold: 0.65
   unresolved_negative_timeout_minutes: 15
   high_risk_categories:

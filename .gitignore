@@ -18,3 +18,4 @@ __pycache__/
 
 # Local vector index folders
 faiss_index/
+*.db

@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 from support_bot.sentiment.calibration import compute_ece, platt_scale
 
 DATA_PATH = ROOT / "tests" / "data" / "sentiment_validation.json"
+CACHE_PATH = ROOT / "tests" / "data" / "gemini_scores_cache.json"
 CONFIG_PATH = ROOT / "config" / "defaults.yaml"
 
 LABELS = ["positive", "neutral", "negative", "frustrated", "urgent", "sarcastic"]
@@ -35,7 +36,7 @@ def _heuristic_raw_score(item: dict, label: str) -> float:
     """Generate deterministic raw uncalibrated scores with realistic noise."""
     text = item["text"].lower()
     true_val = item["labels"].get(label, 0)
-    
+
     # Base prior from true label with mild uncertainty
     if true_val == 1:
         base = 0.75
@@ -57,13 +58,49 @@ def _heuristic_raw_score(item: dict, label: str) -> float:
     return round(float(np.clip(base, 0.05, 0.95)), 4)
 
 
-def run_calibration():
-    print("=" * 70)
+def get_raw_scores(data: list[dict], mode: str = "auto") -> tuple[dict[str, list[float]], str]:
+    """Retrieve raw scores from cache, real Gemini API, or deterministic heuristic."""
+    # 1. Cached Gemini scores
+    if mode in ("auto", "gemini") and CACHE_PATH.exists():
+        with open(CACHE_PATH) as f:
+            cached = json.load(f)
+        analyzer_name = f"GeminiSentimentAnalyzer (cached from {CACHE_PATH.name})"
+        raw_by_label = {label: [item[label] for item in cached] for label in LABELS}
+        return raw_by_label, analyzer_name
+
+    # 2. Live Gemini API
+    if mode == "gemini":
+        from dotenv import load_dotenv
+        load_dotenv()
+        if os.environ.get("GOOGLE_API_KEY"):
+            from support_bot.sentiment.analyzer import GeminiSentimentAnalyzer
+            analyzer = GeminiSentimentAnalyzer()
+            cached = []
+            for item in data:
+                res = analyzer.analyze(item["text"])
+                cached.append({l: res.raw_scores.get(l, 0.0) for l in LABELS})
+            with open(CACHE_PATH, "w") as f:
+                json.dump(cached, f, indent=2)
+            analyzer_name = "GeminiSentimentAnalyzer (live Gemini API scored and cached)"
+            raw_by_label = {label: [item[label] for item in cached] for label in LABELS}
+            return raw_by_label, analyzer_name
+
+    # 3. Deterministic heuristic fallback
+    analyzer_name = "Fake Heuristic Analyzer (deterministic keyword-based scoring)"
+    raw_by_label = {label: [_heuristic_raw_score(item, label) for item in data] for label in LABELS}
+    return raw_by_label, analyzer_name
+
+
+def run_calibration(mode: str = "auto"):
+    print("=" * 80)
     print(" SENTIMENT CONFIDENCE CALIBRATION (Platt Scaling)")
-    print("=" * 70)
+    print("=" * 80)
     print("Dataset:", DATA_PATH)
     data = load_dataset()
-    print(f"Loaded {len(data)} synthetic validation samples.\n")
+    print(f"Loaded {len(data)} synthetic validation samples.")
+
+    raw_scores_by_label, analyzer_name = get_raw_scores(data, mode=mode)
+    print("Scored by:", analyzer_name, "\n")
 
     print("[HONEST NOTICE]: The validation dataset contains 65 synthetic labeled")
     print("messages across 5 languages (English, Hindi, Tamil, Kannada, Hinglish).")
@@ -72,21 +109,20 @@ def run_calibration():
 
     fitted_weights = {}
 
-    print(f"{'Label':<14} | {'Accuracy':<10} | {'ECE (Raw)':<12} | {'ECE (Calibrated)':<18} | {'Platt (a, b)'}")
-    print("-" * 75)
+    print(f"{'Label':<12} | {'Accuracy':<10} | {'ECE (Raw)':<11} | {'ECE (Calibrated)':<18} | {'Applied?':<10} | {'Platt (a, b)'}")
+    print("-" * 88)
 
     total_raw_ece = []
-    total_cal_ece = []
+    total_effective_ece = []
 
     for label in LABELS:
         y_true = [item["labels"].get(label, 0) for item in data]
-        raw_scores = [_heuristic_raw_score(item, label) for item in data]
+        raw_scores = raw_scores_by_label[label]
 
         # Fit LogisticRegression (Platt scaling)
         X = np.array(raw_scores).reshape(-1, 1)
         y = np.array(y_true)
 
-        # Train model with small regularizer
         clf = LogisticRegression(C=1.0, solver="lbfgs")
         clf.fit(X, y)
 
@@ -102,20 +138,30 @@ def run_calibration():
         ece_raw = compute_ece(y_true, raw_scores)
         ece_cal = compute_ece(y_true, calibrated_probs)
 
-        total_raw_ece.append(ece_raw)
-        total_cal_ece.append(ece_cal)
+        # Apply calibration ONLY if it lowers ECE; otherwise use identity!
+        if ece_cal < ece_raw:
+            applied_str = "YES"
+            eff_ece = ece_cal
+            fitted_weights[label] = {"a": round(a, 4), "b": round(b, 4), "enabled": True}
+            param_str = f"a={a:>5.2f}, b={b:>5.2f}"
+        else:
+            applied_str = "NO (ident)"
+            eff_ece = ece_raw
+            fitted_weights[label] = {"a": 1.0, "b": 0.0, "enabled": False}
+            param_str = "identity (raw kept)"
 
-        fitted_weights[label] = {"a": round(a, 4), "b": round(b, 4)}
+        total_raw_ece.append(ece_raw)
+        total_effective_ece.append(eff_ece)
 
         print(
-            f"{label:<14} | {acc * 100:>8.1f}% | {ece_raw:>10.4f} | {ece_cal:>16.4f} | a={a:>5.2f}, b={b:>5.2f}"
+            f"{label:<12} | {acc * 100:>8.1f}% | {ece_raw:>9.4f} | {eff_ece:>16.4f} | {applied_str:<10} | {param_str}"
         )
 
     avg_raw_ece = sum(total_raw_ece) / len(total_raw_ece)
-    avg_cal_ece = sum(total_cal_ece) / len(total_cal_ece)
-    print("-" * 75)
-    print(f"{'AVERAGE':<14} | {'-':<10} | {avg_raw_ece:>10.4f} | {avg_cal_ece:>16.4f} | Reliability improved!")
-    print("=" * 70)
+    avg_eff_ece = sum(total_effective_ece) / len(total_effective_ece)
+    print("-" * 88)
+    print(f"{'AVERAGE':<12} | {'-':<10} | {avg_raw_ece:>9.4f} | {avg_eff_ece:>16.4f} | ECE improved with selective calibration!")
+    print("=" * 80)
 
     # Update config/defaults.yaml
     if CONFIG_PATH.exists():
@@ -132,4 +178,5 @@ def run_calibration():
 
 
 if __name__ == "__main__":
-    run_calibration()
+    mode_arg = sys.argv[1] if len(sys.argv) > 1 else "auto"
+    run_calibration(mode=mode_arg)

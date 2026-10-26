@@ -81,12 +81,17 @@ class SentimentCalibrator:
         return cls(weights=weights, enabled=enabled)
 
     def calibrate(self, label: str, raw_score: float) -> float:
-        """Calibrate confidence for a single label."""
+        """Calibrate confidence for a single label. Uses identity if disabled or uncalibrated."""
+        bounded_raw = round(max(0.0, min(1.0, raw_score)), 4)
         if not self.enabled or label not in self.weights:
-            return round(max(0.0, min(1.0, raw_score)), 4)
+            return bounded_raw
         params = self.weights[label]
+        if not params.get("enabled", True):
+            return bounded_raw
         a = params.get("a", 1.0)
         b = params.get("b", 0.0)
+        if a == 1.0 and b == 0.0:
+            return bounded_raw
         return round(platt_scale(raw_score, a, b), 4)
 
     def calibrate_scores(self, scores: dict[str, float]) -> dict[str, float]:

@@ -31,6 +31,10 @@ cfg = get_config(conn)
 demo_enabled = cfg.get("demo_panel_enabled", False)
 clock = st.session_state["fake_clock"] or SystemClock()
 
+# Service instance for due jobs and escalations
+esc_svc = SentimentEscalationService(conn=conn, clock=clock, config=cfg, auto_migrate=False)
+esc_svc.process_due_jobs()
+
 # ── Knowledgebase builder ──────────────────────────────────────────────────────
 btn = st.button("Create Knowledgebase")
 if btn:
@@ -48,6 +52,7 @@ if question:
     with st.spinner("Finding answer..."):
         sentiment_result = None
         escalation_record = None
+        clarification = None
         tone = "neutral"
 
         if conv_enabled:
@@ -56,25 +61,18 @@ if question:
 
             # ── Sentiment & escalation ─────────────────────────────────────────
             if sent_enabled:
-                esc_service = SentimentEscalationService(
-                    conn=conn, clock=clock, config=cfg, auto_migrate=False
-                )
-                sentiment_result, escalation_record, clarification = esc_service.process_message(
+                sentiment_result, escalation_record, clarification = esc_svc.process_message(
                     session_id=st.session_state["session_id"],
                     text=question,
                     context=conv_resp.context,
                 )
                 if sentiment_result:
                     tone = sentiment_result.tone_instruction or "neutral"
-                # If positive sentiment, cancel any pending timeout job
-                if sentiment_result and sentiment_result.dominant_label == "positive":
-                    esc_service.cancel_timeout_job(st.session_state["session_id"])
-                    esc_service.resolve_escalation(
-                        st.session_state["session_id"], rule_name="repeated_negative"
-                    )
 
             if conv_resp.needs_clarification:
                 answer = conv_resp.clarification_question
+            elif clarification:
+                answer = clarification
             else:
                 query_to_run = conv_resp.normalized_query or question
                 chain = get_qa_chain(tone_instruction=tone)
@@ -120,14 +118,22 @@ if demo_enabled:
             current_fake = fake_clk.now()
             st.write(f"**Current simulated time:** `{current_fake.strftime('%Y-%m-%d %H:%M %Z')}`")
             advance_h = st.number_input("Advance hours", min_value=0, max_value=48, value=0, step=1)
-            if st.button("⏩ Advance Clock") and advance_h > 0:
-                fake_clk.advance(hours=int(advance_h))
-                st.success(f"Clock advanced by {advance_h}h → {fake_clk.now().strftime('%H:%M %Z')}")
+            advance_m = st.number_input("Advance minutes", min_value=0, max_value=120, value=0, step=1)
+            if st.button("⏩ Advance Clock") and (advance_h > 0 or advance_m > 0):
+                fake_clk.advance(hours=int(advance_h), minutes=int(advance_m))
+                st.success(f"Clock advanced by {advance_h}h {advance_m}m → {fake_clk.now().strftime('%H:%M %Z')}")
                 st.rerun()
         else:
             if st.session_state["fake_clock"] is not None:
                 st.session_state["fake_clock"] = None
                 st.rerun()
+
+        # Background Jobs / Due Escalations Trigger
+        st.subheader("⚙️ Background Jobs")
+        if st.button("▶️ Run due jobs"):
+            due_processed = esc_svc.process_due_jobs()
+            st.success(f"Processed {len(due_processed)} due job(s).")
+            st.rerun()
 
         # Sentiment display
         if question and "sentiment_result" in dir() and sentiment_result:
@@ -141,16 +147,14 @@ if demo_enabled:
 
         # Escalation records display
         st.subheader("📋 Escalation Records")
-        if question:
-            esc_svc = SentimentEscalationService(conn=conn, clock=clock, config=cfg, auto_migrate=False)
-            records = esc_svc.get_escalations(st.session_state["session_id"])
-            if records:
-                for r in records:
-                    status_icon = {"pending": "🟡", "in_progress": "🔵", "resolved": "✅"}.get(r.status, "⚪")
-                    st.write(f"{status_icon} **{r.rule_name}** → `{r.routing_outcome}` ({r.status})")
-                    st.caption(r.reason)
-            else:
-                st.write("No escalations for this session.")
+        records = esc_svc.get_escalations(st.session_state["session_id"])
+        if records:
+            for r in records:
+                status_icon = {"pending": "🟡", "in_progress": "🔵", "resolved": "✅"}.get(r.status, "⚪")
+                st.write(f"{status_icon} **{r.rule_name}** → `{r.routing_outcome}` ({r.status})")
+                st.caption(r.reason)
+        else:
+            st.write("No escalations for this session.")
 
         # Session ID
         st.subheader("🔑 Session")

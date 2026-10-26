@@ -121,14 +121,39 @@ class GeminiSentimentAnalyzer(SentimentAnalyzer):
         low_conf_threshold = cfg.get("sentiment", {}).get("low_confidence_threshold", 0.45)
         ctx_summary = context.get("summary", "") if context else ""
 
-        prompt = f"""You are a multilingual customer service sentiment analyzer.
-
+        prompt = f"""You are a multilingual customer service sentiment and risk analyzer.
+Analyze this customer message in any language (English, Hindi, Tamil, Kannada, Hinglish, etc.):
+Message: "{text}"
 Conversation context: "{ctx_summary}"
 
-Analyze this customer message for sentiment:
-"{text}"
+CRITICAL INSTRUCTIONS FOR RISK EVALUATION:
+The risk_category and risk_score MUST reflect the presence and severity of the risk event itself, completely INDEPENDENT OF EMOTIONAL TONE or volume. Even if the customer is calm, polite, or matter-of-fact, a genuine risk event must receive a significant risk_score:
 
-Return ONLY a valid JSON object with these keys:
+- "duplicate_payment": Customer was debited twice, charged multiple times, paid double fee, or shows evidence of duplicate billing.
+  * Calm example: "I think I've been charged twice for the enrollment. Please check." (risk_score: 0.50 to 0.85)
+  * Loud example: "You stole my money two times! Refund immediately!" (risk_score: 0.90 to 0.99)
+
+- "account_compromise": Unauthorized login, password change by unknown party, hacked account, or security lockout.
+  * Calm example: "I noticed a login from an unfamiliar IP and my profile email was changed." (risk_score: 0.75 to 0.90)
+  * Loud example: "Someone hacked my account right now! Help!" (risk_score: 0.95 to 1.0)
+
+- "legal_threat": Explicit or implicit reference to legal counsel, consumer court, lawyer, litigation, police complaint, or regulatory body.
+  * Calm example: "If this cannot be resolved, I will need to consult my legal advisor or consumer forum." (risk_score: 0.70 to 0.85)
+  * Loud example: "I am suing you in high court tomorrow!" (risk_score: 0.95 to 1.0)
+
+- "data_breach": Leak or unauthorized disclosure of sensitive personal, financial, or student data.
+  * Calm example: "I noticed other students' personal records visible on my portal." (risk_score: 0.80 to 0.95)
+
+- "general_risk": Other substantial business or safety hazards.
+
+If no specific risk is mentioned, risk_category must be null and risk_score 0.0.
+A calm question about general fee structure or standard refund policy without duplicate charge is NOT high risk (risk_category: null, risk_score: 0.0).
+
+SENTIMENT SCORES:
+All sentiment scores (positive, neutral, negative, frustrated, urgent, sarcastic) must be between 0.0 and 1.0.
+A sarcastic message that appears positive but is actually criticizing service must have high sarcastic and negative scores.
+
+Return ONLY a valid JSON object:
 {{
   "positive": 0.0,
   "neutral": 0.0,
@@ -139,8 +164,6 @@ Return ONLY a valid JSON object with these keys:
   "risk_category": null or one of ["account_compromise","duplicate_payment","legal_threat","data_breach","general_risk"],
   "risk_score": 0.0
 }}
-All score values must be between 0.0 and 1.0. Be precise. \
-A sarcastic message that appears positive but is actually negative should have high sarcastic and negative scores.
 """
         try:
             raw = self.llm.invoke(prompt)
