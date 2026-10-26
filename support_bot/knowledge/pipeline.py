@@ -239,6 +239,27 @@ class KnowledgePipeline:
                     results.append(doc)
         return results
 
+    def ingest_inbox_and_update(
+        self,
+        inbox_dir: Path | str = "knowledge_inbox",
+        actor: str = "ui",
+        user_role: str | Role = Role.ADMIN,
+    ) -> Dict[str, Any]:
+        """Convenience workflow: ingest inbox, build version, approve, and activate."""
+        folder = Path(inbox_dir)
+        docs = self.ingest_inbox(folder, actor=actor, user_role=user_role)
+        v_id = f"v_{int(self.clock.now().timestamp())}"
+        ver = self.build_version(v_id, actor=actor, user_role=user_role)
+        if not ver:
+            return {"status": "failed", "error": "Build failed or no valid documents"}
+        self.approve_version(v_id, actor=actor, user_role=user_role)
+        act_res = self.activate_version(v_id, actor=actor, user_role=user_role, force=True)
+        return {
+            "status": "active" if act_res.is_active else "scheduled",
+            "version_id": v_id,
+            "document_count": len(docs),
+        }
+
     def _quarantine_file(
         self,
         file_path: Path,
