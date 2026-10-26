@@ -8,6 +8,16 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    _env = Path(__file__).resolve().parent.parent.parent / '.env'
+    if _env.exists():
+        load_dotenv(_env)
+    else:
+        load_dotenv()
+except Exception:
+    pass
 
 from support_bot.sentiment.calibration import SentimentCalibrator
 
@@ -102,11 +112,12 @@ class GeminiSentimentAnalyzer(SentimentAnalyzer):
     def __init__(self, model_name: str = "gemini-3.8-flash", api_key: str | None = None):
         from langchain_google_genai import GoogleGenerativeAI
 
-        key = api_key or os.environ.get("GOOGLE_API_KEY")
+        key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "fake_key_fallback"
         self.llm = GoogleGenerativeAI(
             model=model_name,
             google_api_key=key,
             temperature=0.0,
+            request_timeout=5.0,
         )
 
     def analyze(
