@@ -34,7 +34,7 @@ VECTORDB_FILE_PATH = "faiss_index"
 # ---------------------------------------------------------------------------
 llm = GoogleGenerativeAI(
     model="gemini-3.8-flash",
-    google_api_key=os.environ.get("GOOGLE_API_KEY"),
+    google_api_key=os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "fake_key_for_offline_testing",
     temperature=0.1,
 )
 

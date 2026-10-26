@@ -1,5 +1,9 @@
 """Shared pytest fixtures for support_bot tests."""
 
+import os
+os.environ.setdefault("GOOGLE_API_KEY", "fake_key_for_testing")
+os.environ.setdefault("GEMINI_API_KEY", "fake_key_for_testing")
+
 import sqlite3
 import pytest
 
