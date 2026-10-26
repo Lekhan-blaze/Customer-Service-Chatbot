@@ -255,7 +255,7 @@ class KnowledgePipeline:
         self.approve_version(v_id, actor=actor, user_role=user_role)
         act_res = self.activate_version(v_id, actor=actor, user_role=user_role, force=True)
         return {
-            "status": "active" if act_res.is_active else "scheduled",
+            "status": act_res.get("status", "active"),
             "version_id": v_id,
             "document_count": len(docs),
         }
