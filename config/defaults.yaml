@@ -133,4 +133,5 @@ files:
   max_size_bytes: 10485760  # 10 MB
   retention_days: 30
   ocr_confidence_threshold: 0.5
+  processing_timeout_seconds: 30
   long_running_threshold_seconds: 30

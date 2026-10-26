@@ -243,3 +243,101 @@ def test_purge_job_enqueued_on_upload(file_env, tmp_path):
     assert job is not None
     payload = json.loads(job["payload"])
     assert payload["file_id"] == record.id
+
+
+def test_slow_ocr_over_30_seconds_queued_and_customer_notified(file_env, tmp_path):
+    """If OCR takes over 30s, moves to queue, immediately returns notification, and supports polling."""
+    slow_ocr = FakeOCR(
+        fixtures={"slow_receipt": "Order ID: ORD-998811\nAmount: 4999"},
+        duration_seconds=35.0,  # > 30s threshold
+    )
+    svc = FileService(
+        conn=file_env["conn"],
+        clock=file_env["clock"],
+        config=file_env["config"],
+        audit=file_env["svc"].audit,
+        job_queue=file_env["svc"].job_queue,
+        ocr_engine=slow_ocr,
+        storage_root=str(tmp_path / "uploads_slow"),
+        auto_migrate=False,
+    )
+
+    f = tmp_path / "slow_receipt.png"
+    f.write_bytes(b"PNG_HEADER slow test bytes")
+
+    record, rejection, conflicts = svc.process_upload(str(f), session_id="sess_slow")
+    assert rejection is None
+    assert record is not None
+    assert record.ocr_status == "queued"
+    assert record.customer_message is not None
+    assert "queued" in record.customer_message.lower()
+    assert record.id in record.customer_message
+
+    # Polling by upload ID returns queued status
+    polled = svc.poll_upload(record.id)
+    assert polled is not None
+    assert polled.ocr_status == "queued"
+
+
+def test_queued_job_execution_produces_result(file_env, tmp_path):
+    """Processing queued OCR job updates status to done and stores extracted fields."""
+    slow_ocr = FakeOCR(
+        fixtures={"slow_receipt": "Order ID: ORD-998811\nAmount: Rs. 14999\nDate: 15/04/2026"},
+        duration_seconds=35.0,
+    )
+    svc = FileService(
+        conn=file_env["conn"],
+        clock=file_env["clock"],
+        config=file_env["config"],
+        audit=file_env["svc"].audit,
+        job_queue=file_env["svc"].job_queue,
+        ocr_engine=slow_ocr,
+        storage_root=str(tmp_path / "uploads_slow2"),
+        auto_migrate=False,
+    )
+
+    f = tmp_path / "slow_receipt.png"
+    f.write_bytes(b"PNG_HEADER slow test bytes")
+
+    record, _, _ = svc.process_upload(str(f), session_id="sess_slow2")
+    assert record.ocr_status == "queued"
+
+    # Now execute the queued job via JobQueue tick
+    processed_job_ids = svc.job_queue.tick(svc.get_job_handlers())
+    assert len(processed_job_ids) >= 1
+
+    # Poll status by upload ID - status should now be 'done' with extracted fields
+    polled = svc.poll_upload(record.id)
+    assert polled is not None
+    assert polled.ocr_status == "done"
+    assert polled.ocr_extracted_fields.get("order_id") == "ORD-998811"
+    assert polled.ocr_extracted_fields.get("amount") == "14999"
+
+
+def test_ocr_failure_requests_another_file_without_inventing_values(file_env, tmp_path):
+    """Unreadable/failed OCR sets status to failed, invents no values, and asks for another file."""
+    failing_ocr = FakeOCR(fail_files=["unreadable_scan"])
+    svc = FileService(
+        conn=file_env["conn"],
+        clock=file_env["clock"],
+        config=file_env["config"],
+        audit=file_env["svc"].audit,
+        job_queue=file_env["svc"].job_queue,
+        ocr_engine=failing_ocr,
+        storage_root=str(tmp_path / "uploads_fail"),
+        auto_migrate=False,
+    )
+
+    f = tmp_path / "unreadable_scan.png"
+    f.write_bytes(b"PNG_HEADER corrupt/blurry bytes")
+
+    record, rejection, conflicts = svc.process_upload(str(f), session_id="sess_fail")
+    assert rejection is None
+    assert record is not None
+    assert record.ocr_status == "failed"
+    # Must NOT invent values
+    assert record.ocr_extracted_fields == {}
+    assert record.ocr_confidence == 0.0
+    # Must ask for another file
+    assert len(conflicts) > 0
+    assert "upload another clear" in conflicts[0].clarification_prompt.lower()

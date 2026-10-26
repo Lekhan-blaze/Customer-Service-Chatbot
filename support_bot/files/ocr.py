@@ -2,7 +2,7 @@
 
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from support_bot.files.models import OcrExtractedFields, OcrResult
 
@@ -101,18 +101,43 @@ class FakeOCR(BaseOCR):
         self,
         fixtures: Optional[Dict[str, str]] = None,
         confidence_overrides: Optional[Dict[str, float]] = None,
+        duration_seconds: float = 0.0,
+        fail_files: Optional[List[str]] = None,
     ) -> None:
         """fixtures: dict of {filename_stem: raw_text_to_return}
         confidence_overrides: dict of {filename_stem: confidence_float} to force-set confidence.
+        duration_seconds: simulated processing duration.
+        fail_files: list of filename stems or paths that should fail OCR processing.
         """
         self.fixtures = fixtures or {}
         self.confidence_overrides = confidence_overrides or {}
+        self.duration_seconds = duration_seconds
+        self.fail_files = set(fail_files or [])
 
     def process(self, file_path: str, file_type: str) -> OcrResult:
+        import re
         from pathlib import Path
         stem = Path(file_path).stem
+        clean_stem = re.sub(r"^[a-f0-9]{8}_", "", stem)
+        if (
+            stem in self.fail_files
+            or clean_stem in self.fail_files
+            or file_path in self.fail_files
+            or Path(file_path).name in self.fail_files
+        ):
+            return OcrResult(
+                text="",
+                confidence=0.0,
+                extracted_fields=OcrExtractedFields(),
+                engine_used="failed",
+            )
         # Check explicit fixture
-        raw_text = self.fixtures.get(stem) or self.fixtures.get(file_path, "")
+        raw_text = (
+            self.fixtures.get(stem)
+            or self.fixtures.get(clean_stem)
+            or self.fixtures.get(file_path, "")
+            or self.fixtures.get(Path(file_path).name, "")
+        )
 
         # If actual .txt file (for test convenience), read its content
         if not raw_text:
@@ -125,7 +150,7 @@ class FakeOCR(BaseOCR):
 
         fields = _extract_fields_from_text(raw_text)
         # Allow test override of confidence (e.g. to simulate blurry/low-confidence scan)
-        forced_conf = self.confidence_overrides.get(stem)
+        forced_conf = self.confidence_overrides.get(stem) if stem in self.confidence_overrides else self.confidence_overrides.get(clean_stem)
         confidence = forced_conf if forced_conf is not None else (fields.confidence if raw_text else 0.0)
         fields.confidence = confidence
         return OcrResult(

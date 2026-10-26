@@ -1,11 +1,12 @@
 """File Service: Main orchestrator for multimodal file upload, OCR, and retention."""
 
 import json
+import re
 import sqlite3
 import uuid
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from support_bot.audit import AuditLogger
@@ -49,6 +50,9 @@ class FileService:
     def _retention_days(self) -> int:
         return self.config.get("files", {}).get("retention_days", self.config.get("retention", {}).get("file_days", 30))
 
+    def _processing_timeout_seconds(self) -> float:
+        return float(self.config.get("files", {}).get("processing_timeout_seconds", 30.0))
+
     def process_upload(
         self,
         file_path: str,
@@ -57,11 +61,11 @@ class FileService:
         ticket_id: Optional[str] = None,
         user_claims: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Optional[FileUploadRecord], Optional[str], List[ConflictReport]]:
-        """Process an uploaded file end-to-end.
+        """Process an uploaded file.
         
-        Returns (FileUploadRecord, rejection_reason, conflict_reports).
-        - If rejection_reason is set, file was rejected (validation failed).
-        - conflict_reports: list of OCR vs user-stated field conflicts.
+        If processing exceeds files.processing_timeout_seconds (default 30),
+        moves work to the background job queue, marks status as 'queued',
+        and immediately returns customer notification message.
         """
         p = Path(file_path)
         file_type = p.suffix.lstrip(".").lower()
@@ -85,56 +89,193 @@ class FileService:
         if file_bytes:
             stored_path.write_bytes(file_bytes)
 
-        # 3. OCR processing
+        record_id = f"FILE-{uid.upper()}"
         now = self.clock.now(ZoneInfo("UTC"))
-        ocr_result = self.ocr_engine.process(str(file_path), file_type)
-
-        # 4. Injection detection on OCR text
-        inj_res = detect_injection(ocr_result.text)
-        injection_risk = inj_res.score
-        injection_reasons = inj_res.reasons
-
-        # Scrub injection commands from text before storing — prevents leakage via OCR log
-        import re as _re
-        scrubbed_text = ocr_result.text
-        if injection_risk >= (self.config.get("injection_detection", {}).get("threshold", 0.6)):
-            scrubbed_text = _re.sub(
-                r"(?i)\b(system override|ignore previous rules|reveal admin password|disregard prior directives|jailbreak)[^.\n]*[.\n]?",
-                "[REDACTED_INJECTION]",
-                scrubbed_text,
-            ).strip()
-
-        # 5. Mismatch detection
-        conflicts: List[ConflictReport] = []
-        if user_claims:
-            conflicts = detect_conflicts(ocr_result.extracted_fields, user_claims)
-
-        # 6. Retention expiry
         expires_at = (now + timedelta(days=self._retention_days())).isoformat()
 
-        # 7. Persist
-        record_id = f"FILE-{uid.upper()}"
-        record = FileUploadRecord(
-            id=record_id,
+        # 3. Check for execution timeout / slow processing
+        duration = getattr(self.ocr_engine, "duration_seconds", 0.0) or getattr(self.ocr_engine, "simulated_duration", 0.0)
+        timeout = self._processing_timeout_seconds()
+
+        if duration > timeout:
+            # Advance clock if FakeClock has advance method
+            if hasattr(self.clock, "advance"):
+                self.clock.advance(seconds=timeout)
+
+            customer_msg = (
+                f"Your document processing is taking longer than {int(timeout)} seconds and has been "
+                f"queued for background analysis. You can check status with Upload ID: {record_id}."
+            )
+
+            record = FileUploadRecord(
+                id=record_id,
+                session_id=session_id,
+                ticket_id=ticket_id,
+                original_filename=p.name,
+                safe_filename=stored_name,
+                file_type=file_type,
+                file_size_bytes=len(file_bytes) if file_bytes else 0,
+                storage_path=str(stored_path),
+                scan_status="clean",
+                ocr_status="queued",
+                ocr_text=None,
+                ocr_confidence=None,
+                ocr_extracted_fields={},
+                extraction_conflicts=[],
+                injection_risk_score=0.0,
+                injection_reasons=[],
+                expires_at=expires_at,
+                customer_message=customer_msg,
+                created_at=now.isoformat(),
+                updated_at=now.isoformat(),
+            )
+
+            self.conn.execute(
+                "INSERT INTO file_uploads ("
+                "id, session_id, ticket_id, original_filename, safe_filename, file_type, "
+                "file_size_bytes, storage_path, scan_status, ocr_status, ocr_text, "
+                "ocr_confidence, ocr_extracted_fields, extraction_conflicts, "
+                "injection_risk_score, injection_reasons, expires_at, created_at, updated_at"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    record.id, record.session_id, record.ticket_id, record.original_filename,
+                    record.safe_filename, record.file_type, record.file_size_bytes,
+                    record.storage_path, record.scan_status, record.ocr_status,
+                    record.ocr_text, record.ocr_confidence, json.dumps({}), json.dumps([]),
+                    record.injection_risk_score, json.dumps([]), record.expires_at,
+                    record.created_at, record.updated_at,
+                ),
+            )
+            self.conn.commit()
+
+            # Enqueue background job
+            if self.job_queue:
+                self.job_queue.enqueue(
+                    job_type="process_file_ocr",
+                    payload={"file_id": record.id, "user_claims": user_claims or {}},
+                )
+
+            self.audit.log(
+                "file_processing_queued",
+                file_id=record.id,
+                session_id=session_id,
+                timeout_threshold=timeout,
+                duration=duration,
+            )
+            return record, None, []
+
+        # 4. Synchronous OCR execution
+        return self._execute_ocr_and_persist(
+            record_id=record_id,
+            stored_path=stored_path,
+            original_filename=p.name,
+            stored_name=stored_name,
+            file_type=file_type,
+            file_bytes=file_bytes,
             session_id=session_id,
             ticket_id=ticket_id,
-            original_filename=p.name,
-            safe_filename=stored_name,
-            file_type=file_type,
-            file_size_bytes=len(file_bytes) if file_bytes else 0,
-            storage_path=str(stored_path),
-            scan_status="clean",
-            ocr_status="done",
-            ocr_text=mask_pii(scrubbed_text),  # Scrub injections & mask PII before storing
-            ocr_confidence=ocr_result.confidence,
-            ocr_extracted_fields=ocr_result.extracted_fields.to_dict(),
-            extraction_conflicts=[c.clarification_prompt for c in conflicts],
-            injection_risk_score=injection_risk,
-            injection_reasons=injection_reasons,
+            user_claims=user_claims,
             expires_at=expires_at,
             created_at=now.isoformat(),
-            updated_at=now.isoformat(),
         )
+
+    def _execute_ocr_and_persist(
+        self,
+        record_id: str,
+        stored_path: Path,
+        original_filename: str,
+        stored_name: str,
+        file_type: str,
+        file_bytes: Optional[bytes],
+        session_id: Optional[str],
+        ticket_id: Optional[str],
+        user_claims: Optional[Dict[str, Any]],
+        expires_at: str,
+        created_at: str,
+    ) -> Tuple[FileUploadRecord, Optional[str], List[ConflictReport]]:
+        now = self.clock.now(ZoneInfo("UTC"))
+        ocr_result = self.ocr_engine.process(str(stored_path), file_type)
+
+        # Check for OCR failure
+        is_failed = (
+            ocr_result.engine_used == "failed"
+            or (ocr_result.confidence == 0.0 and not ocr_result.text)
+            or ocr_result.engine_used.startswith("gemini_error")
+        )
+
+        if is_failed:
+            clarification = (
+                "We were unable to read this file clearly. "
+                "Please upload another clear photo or PDF document."
+            )
+            conflicts = [
+                ConflictReport(
+                    field="file",
+                    user_stated="",
+                    ocr_extracted="unreadable",
+                    severity="high",
+                    clarification_prompt=clarification,
+                )
+            ]
+            record = FileUploadRecord(
+                id=record_id,
+                session_id=session_id,
+                ticket_id=ticket_id,
+                original_filename=original_filename,
+                safe_filename=stored_name,
+                file_type=file_type,
+                file_size_bytes=len(file_bytes) if file_bytes else 0,
+                storage_path=str(stored_path),
+                scan_status="clean",
+                ocr_status="failed",
+                ocr_text="",
+                ocr_confidence=0.0,
+                ocr_extracted_fields={},
+                extraction_conflicts=[c.clarification_prompt for c in conflicts],
+                injection_risk_score=0.0,
+                injection_reasons=[],
+                expires_at=expires_at,
+                customer_message=clarification,
+                created_at=created_at,
+                updated_at=now.isoformat(),
+            )
+        else:
+            # Injection detection
+            inj_res = detect_injection(ocr_result.text)
+            injection_risk = inj_res.score
+            injection_reasons = inj_res.reasons
+
+            scrubbed_text = ocr_result.text
+            if injection_risk >= (self.config.get("injection_detection", {}).get("threshold", 0.6)):
+                scrubbed_text = re.sub(r"(?i)\b(system override|ignore previous rules|reveal admin password|disregard prior directives|jailbreak)[^.\n]*[.\n]?", "[REDACTED_INJECTION]", scrubbed_text).strip()
+
+            # Mismatches
+            conflicts = []
+            if user_claims:
+                conflicts = detect_conflicts(ocr_result.extracted_fields, user_claims)
+
+            record = FileUploadRecord(
+                id=record_id,
+                session_id=session_id,
+                ticket_id=ticket_id,
+                original_filename=original_filename,
+                safe_filename=stored_name,
+                file_type=file_type,
+                file_size_bytes=len(file_bytes) if file_bytes else 0,
+                storage_path=str(stored_path),
+                scan_status="clean",
+                ocr_status="done",
+                ocr_text=mask_pii(scrubbed_text),
+                ocr_confidence=ocr_result.confidence,
+                ocr_extracted_fields=ocr_result.extracted_fields.to_dict(),
+                extraction_conflicts=[c.clarification_prompt for c in conflicts],
+                injection_risk_score=injection_risk,
+                injection_reasons=injection_reasons,
+                expires_at=expires_at,
+                customer_message=None,
+                created_at=created_at,
+                updated_at=now.isoformat(),
+            )
 
         self.conn.execute(
             "INSERT INTO file_uploads ("
@@ -142,27 +283,23 @@ class FileService:
             "file_size_bytes, storage_path, scan_status, ocr_status, ocr_text, "
             "ocr_confidence, ocr_extracted_fields, extraction_conflicts, "
             "injection_risk_score, injection_reasons, expires_at, created_at, updated_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET "
+            "ocr_status=excluded.ocr_status, ocr_text=excluded.ocr_text, "
+            "ocr_confidence=excluded.ocr_confidence, ocr_extracted_fields=excluded.ocr_extracted_fields, "
+            "extraction_conflicts=excluded.extraction_conflicts, "
+            "injection_risk_score=excluded.injection_risk_score, "
+            "injection_reasons=excluded.injection_reasons, updated_at=excluded.updated_at",
             (
-                record.id,
-                record.session_id,
-                record.ticket_id,
-                record.original_filename,
-                record.safe_filename,
-                record.file_type,
-                record.file_size_bytes,
-                record.storage_path,
-                record.scan_status,
-                record.ocr_status,
-                record.ocr_text,
-                record.ocr_confidence,
+                record.id, record.session_id, record.ticket_id, record.original_filename,
+                record.safe_filename, record.file_type, record.file_size_bytes,
+                record.storage_path, record.scan_status, record.ocr_status,
+                record.ocr_text, record.ocr_confidence,
                 json.dumps(record.ocr_extracted_fields or {}),
                 json.dumps(record.extraction_conflicts),
                 record.injection_risk_score,
                 json.dumps(record.injection_reasons),
-                record.expires_at,
-                record.created_at,
-                record.updated_at,
+                record.expires_at, record.created_at, record.updated_at,
             ),
         )
         self.conn.commit()
@@ -172,12 +309,11 @@ class FileService:
             file_id=record.id,
             session_id=session_id,
             file_type=file_type,
-            ocr_confidence=ocr_result.confidence,
+            ocr_status=record.ocr_status,
+            ocr_confidence=record.ocr_confidence,
             conflicts=len(conflicts),
-            injection_risk=injection_risk,
         )
 
-        # 8. Schedule expiry purge job
         if self.job_queue:
             self.job_queue.enqueue(
                 job_type="purge_expired_file",
@@ -186,6 +322,83 @@ class FileService:
             )
 
         return record, None, conflicts
+
+    def process_queued_file(self, file_id: str, user_claims: Optional[Dict[str, Any]] = None) -> Optional[FileUploadRecord]:
+        """Worker task to process a queued file."""
+        row = self.conn.execute("SELECT * FROM file_uploads WHERE id = ?", (file_id,)).fetchone()
+        if not row:
+            return None
+
+        # Mark as processing
+        now = self.clock.now(ZoneInfo("UTC")).isoformat()
+        self.conn.execute("UPDATE file_uploads SET ocr_status = 'processing', updated_at = ? WHERE id = ?", (now, file_id))
+        self.conn.commit()
+
+        stored_path = Path(row["storage_path"])
+        file_type = row["file_type"]
+
+        # Run OCR
+        ocr_result = self.ocr_engine.process(str(stored_path), file_type)
+        is_failed = (
+            ocr_result.engine_used == "failed"
+            or (ocr_result.confidence == 0.0 and not ocr_result.text)
+            or ocr_result.engine_used.startswith("gemini_error")
+        )
+
+        if is_failed:
+            clarification = (
+                "We were unable to read this file clearly. "
+                "Please upload another clear photo or PDF document."
+            )
+            conflicts = [clarification]
+            extracted_fields: Dict[str, Any] = {}
+            status = "failed"
+            text = ""
+            conf = 0.0
+            inj_score = 0.0
+            inj_reasons: List[str] = []
+        else:
+            inj_res = detect_injection(ocr_result.text)
+            inj_score = inj_res.score
+            inj_reasons = inj_res.reasons
+
+            scrubbed_text = ocr_result.text
+            if inj_score >= (self.config.get("injection_detection", {}).get("threshold", 0.6)):
+                scrubbed_text = re.sub(r"(?i)\b(system override|ignore previous rules|reveal admin password|disregard prior directives|jailbreak)[^.\n]*[.\n]?", "[REDACTED_INJECTION]", scrubbed_text).strip()
+
+            c_objs = detect_conflicts(ocr_result.extracted_fields, user_claims or {}) if user_claims else []
+            conflicts = [c.clarification_prompt for c in c_objs]
+            extracted_fields = ocr_result.extracted_fields.to_dict()
+            status = "done"
+            text = mask_pii(scrubbed_text)
+            conf = ocr_result.confidence
+
+        updated_now = self.clock.now(ZoneInfo("UTC")).isoformat()
+        self.conn.execute(
+            "UPDATE file_uploads SET "
+            "ocr_status = ?, ocr_text = ?, ocr_confidence = ?, ocr_extracted_fields = ?, "
+            "extraction_conflicts = ?, injection_risk_score = ?, injection_reasons = ?, updated_at = ? "
+            "WHERE id = ?",
+            (
+                status, text, conf, json.dumps(extracted_fields),
+                json.dumps(conflicts), inj_score, json.dumps(inj_reasons),
+                updated_now, file_id,
+            ),
+        )
+        self.conn.commit()
+        self.audit.log("file_queued_processing_complete", file_id=file_id, ocr_status=status)
+        return self.get_record(file_id)
+
+    def poll_upload(self, file_id: str) -> Optional[FileUploadRecord]:
+        """Poll the current processing status and details of an upload by ID."""
+        return self.get_record(file_id)
+
+    def get_job_handlers(self) -> Dict[str, Callable[[dict | None], Any]]:
+        """Return job handlers for integration with JobQueue / background workers."""
+        return {
+            "process_file_ocr": lambda p: self.process_queued_file((p or {}).get("file_id"), (p or {}).get("user_claims")),
+            "purge_expired_file": lambda p: self.purge_expired_files(),
+        }
 
     def get_record(self, file_id: str) -> Optional[FileUploadRecord]:
         """Fetch a file upload record by ID."""

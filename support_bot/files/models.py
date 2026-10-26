@@ -63,4 +63,5 @@ class FileUploadRecord:
     purged: bool = False
     purged_at: Optional[str] = None
     created_at: str = ""
+    customer_message: Optional[str] = None
     updated_at: str = ""
