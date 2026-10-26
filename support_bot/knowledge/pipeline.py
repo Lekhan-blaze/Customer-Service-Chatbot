@@ -672,6 +672,25 @@ class KnowledgePipeline:
         except Exception:
             return None
 
+    def list_versions(self) -> List[KnowledgeVersion]:
+        """Return all knowledge base versions sorted by created_at desc."""
+        rows = self.conn.execute("SELECT * FROM kb_versions ORDER BY created_at DESC").fetchall()
+        return [
+            KnowledgeVersion(
+                id=r["id"],
+                document_count=r["document_count"],
+                chunk_count=r["chunk_count"],
+                storage_path=r["storage_path"],
+                is_active=bool(r["is_active"]),
+                state=KnowledgeVersionState(r["state"]),
+                quality_score=r["quality_score"],
+                activated_at=r["activated_at"],
+                rolled_back_at=r["rolled_back_at"],
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
     def get_metrics(self) -> Dict[str, Any]:
         """Return operational pipeline metrics."""
         docs_count = self.conn.execute("SELECT count(*) as c FROM kb_documents").fetchone()["c"]

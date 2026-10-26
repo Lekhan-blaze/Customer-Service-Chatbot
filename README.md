@@ -91,6 +91,14 @@ The test suite includes 136 automated tests covering the foundation package, mul
 
 ---
 
+
+### Database Migrations & Schema Integrity
+| Requirement | Test Module | Test Case |
+|---|---|---|
+| All migrations have unique, strictly increasing versions | `tests/test_migrations.py` | `test_migration_versions_unique` |
+| Migration runner fails loudly on duplicate versions | `tests/test_migrations.py` | `test_migration_runner_fails_loudly_on_duplicates` |
+| Clean migrations on empty database creates all 19 tables | `tests/test_migrations.py` | `test_migrations_run_on_empty_db_creates_all_tables` |
+
 ## Module 6: Multilingual Sessions
 
 The `support_bot/conversation/` module extends the customer service chatbot with model-based multilingual conversation analysis, entity preservation, and session lifecycle management while keeping the English FAQ knowledge base (`dataset/dataset.csv`) and FAISS retriever intact.
@@ -380,6 +388,8 @@ Automated support ticket lifecycle engine with dynamic field validation, skill-b
 | SLA warning at 75% elapsed and breach escalation | `tests/test_tickets.py` | `test_sla_warning_at_75_percent_and_breach_escalation` |
 | Runtime SLA configuration overrides | `tests/test_tickets.py` | `test_runtime_sla_config_change` |
 | PII and payment data masked in handoff summary | `tests/test_tickets.py` | `test_masked_handoff_summary` |
+| After-hours routing to on-call (P1) or next-working-day | `tests/test_tickets.py` | `test_after_hours_routing_on_call_and_next_working_day` |
+| Priority calculation (severity, stored escalation, wait, impact) | `tests/test_tickets.py` | `test_priority_calculation_from_severity_sentiment_wait_time_and_impact` |
 
 ---
 
@@ -429,3 +439,64 @@ End-to-end evidence ingestion and verification pipeline for handling customer at
 | PII / payment data masked in stored OCR text | `tests/test_files_ocr.py` | `test_pii_masked_in_stored_ocr_text` |
 | Expired file purged from filesystem & DB updated | `tests/test_files_ocr.py` | `test_expired_file_purged_from_disk` |
 | Background purge job enqueued on upload | `tests/test_files_ocr.py` | `test_purge_job_enqueued_on_upload` |
+| Processing > 30s queued & customer notified with Upload ID | `tests/test_files_ocr.py` | `test_slow_ocr_over_30_seconds_queued_and_customer_notified` |
+| Background OCR job execution transitions to done with results | `tests/test_files_ocr.py` | `test_queued_job_execution_produces_result` |
+| OCR failure requests another file without inventing values | `tests/test_files_ocr.py` | `test_ocr_failure_requests_another_file_without_inventing_values` |
+
+---
+
+## Comprehensive Demo Script (8 Interactive Scenarios)
+
+The sidebar **Demo Scenarios** expander lists 8 guided test scenarios to verify all capabilities:
+
+1. **Calm Duplicate Payment (Module 1)**:
+   - Message: `"I think I've been charged twice for the Data Science course enrollment. Please check."`
+   - Verification: Risk category detected as `duplicate_payment`, risk score evaluated independent of calm tone.
+
+2. **Consecutive Negative Escalation (Module 1)**:
+   - Messages: Send 3 consecutive frustrated queries (e.g., `"Still not working!"`, `"This is completely unacceptable!"`, `"Fix this right now!"`).
+   - Verification: Dominant sentiment triggers empathetic tone adjustment, then escalates to `human_queue`.
+
+3. **Immediate High-Risk Bypass (Module 1)**:
+   - Message: `"I will take legal action against your company for data breach."`
+   - Verification: Bypasses consecutive count requirement, immediately escalates to on-call supervisor.
+
+4. **Historical Policy Query (Module 4)**:
+   - Question: `"What was the refund policy on 15 March 2025?"`
+   - Verification: Parses historical date, returns expired 7-day policy (v1) with citation, ignoring current v2 and future v3.
+
+5. **Current Policy Query (Module 4)**:
+   - Question: `"What is the current refund policy?"`
+   - Verification: Returns active 14-day policy (v2) with citation `[Refund Policy (v2)]`. Future-dated 30-day guarantee is excluded.
+
+6. **Restricted Internal Guide Authorization (Module 4)**:
+   - Question: `"Show me the internal supervisor escalation guide."`
+   - Customer Role: Safely refuses (`"I don't know"` / restricted).
+   - Internal/Admin Role: Successfully answers with citation to internal guide.
+
+7. **Structured Ticket Creation & SLA Tracking (Module 2)**:
+   - Action: In the *Support Ticket Actions* section, click *"Create Ticket from Conversation"*.
+   - Verification: Mandatory fields extracted, assigned to resolver team (`billing`/`technical`/`academic`), SLA target computed skipping weekends/holidays, masked handoff brief generated.
+
+8. **Multimodal Evidence Upload & Discrepancy Detection (Module 5)**:
+   - Action: Expand *Attach Document / Screenshot / Receipt*, enter Claimed Amount: `14999`, and upload receipt image/pdf.
+   - Verification: OCR extracts order ID and amount; if document amount differs (e.g. ₹9,999 vs ₹14,999), a structured conflict report requests customer clarification.
+
+---
+
+## Limitations & Simplifications
+
+In accordance with production readiness standards, the following aspects are intentionally documented:
+
+1. **Live Model Calls**:
+   - Live external model API calls (`GeminiSentimentAnalyzer`, `GeminiVisionOCR`) were not tested live because the configured API model endpoint returned `404 NOT_FOUND`.
+   - All production code paths include defensive fallbacks (`FakeOCR`, deterministic rule/calibrated heuristic analyzers) ensuring zero runtime disruption in air-gapped or restricted network environments.
+
+2. **Vector Retrieval in Tests**:
+   - Unit and regression test suites utilize an in-memory normalized cosine similarity engine with TF-IDF downweighting instead of remote vector databases. This enables fast, 100% deterministic test execution without network calls or GPU requirements.
+
+3. **OCR Engine**:
+   - `BaseOCR` provides an abstract contract. `FakeOCR` provides deterministic extraction for unit test fixtures, while `GeminiVisionOCR` provides live multimodal LLM extraction when valid credentials and active endpoints are present.
+
+4. **Time & Schedulers**:
+   - Background jobs, maintenance windows, and SLA business hours rely on the injectable `Clock` abstraction (`SystemClock` for live runtime; `FakeClock` for testing future-scheduled jobs and SLA breach simulations).

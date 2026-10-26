@@ -9,6 +9,28 @@ from __future__ import annotations
 import os
 import sys
 import json
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    env_file = Path(__file__).resolve().parent.parent / ".env"
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file)
+    else:
+        load_dotenv()
+except Exception:
+    pass
+
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+import os
+import sys
+import json
 
 # Ensure PYTHONPATH includes project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
