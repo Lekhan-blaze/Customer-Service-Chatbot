@@ -279,6 +279,7 @@ class GeminiAnalyzer(MessageAnalyzer):
             model=model_name,
             google_api_key=key,
             temperature=0.0,
+            request_timeout=5.0,
         )
 
     def analyze(
