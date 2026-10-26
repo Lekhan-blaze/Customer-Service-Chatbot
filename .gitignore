@@ -26,3 +26,5 @@ kb_quarantine/
 *.db-shm
 .pytest_cache/
 test_fresh_run.db
+knowledge_inbox/quarantine/
+docs/qa_results.json
