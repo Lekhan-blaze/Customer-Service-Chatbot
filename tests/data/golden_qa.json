@@ -1,0 +1,61 @@
+[
+  {
+    "question": "Can I take this course if I have never done programming before?",
+    "expected_doc_id": "faq_programming_beginner",
+    "expected_keywords": [
+      "perfect training",
+      "never done coding",
+      "career in the AI industry"
+    ],
+    "category": "faq"
+  },
+  {
+    "question": "What is the refund eligibility window for course purchases?",
+    "expected_doc_id": "doc_refund_v2",
+    "expected_keywords": [
+      "14 days",
+      "25% of course videos"
+    ],
+    "category": "policy"
+  },
+  {
+    "question": "How are duplicate or double charges handled for courses?",
+    "expected_doc_id": "doc_refund_v2",
+    "expected_keywords": [
+      "duplicate",
+      "100% refund",
+      "extra charge"
+    ],
+    "category": "policy"
+  },
+  {
+    "question": "What GST tax rate is applied to course purchases in India?",
+    "expected_doc_id": "doc_india_fee_policy",
+    "expected_keywords": [
+      "18%",
+      "Goods and Services Tax",
+      "GST"
+    ],
+    "category": "policy"
+  },
+  {
+    "question": "What is the prerequisite for taking this bootcamp?",
+    "expected_doc_id": "faq_prerequisites",
+    "expected_keywords": [
+      "functional laptop",
+      "4GB ram",
+      "internet connection"
+    ],
+    "category": "faq"
+  },
+  {
+    "question": "When can a Tier 2 supervisor issue refunds over 500 dollars without manager signoff?",
+    "expected_doc_id": "doc_internal_escalation",
+    "expected_keywords": [
+      "Tier 2 supervisors",
+      "discretionary refunds",
+      "managerial signoff"
+    ],
+    "category": "internal"
+  }
+]

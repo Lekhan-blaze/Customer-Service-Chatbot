@@ -3,6 +3,7 @@
 Extends the base FAQ chatbot with:
 - Multilingual conversation & session management (ConversationService)
 - Sentiment analysis, tone adjustment, and escalation (SentimentEscalationService)
+- Knowledge-base pipeline & Secure RAG layer with pre-retrieval filtering (Modules 3 & 4)
 - Optional Debug / Demo sidebar panel (enabled via config.demo_panel_enabled)
 """
 
@@ -12,8 +13,10 @@ from langchain_helper import get_qa_chain, create_vector_db
 from support_bot.config import get_config
 from support_bot.db import get_connection, run_migrations
 from support_bot.clock import FakeClock, SystemClock
+from support_bot.container import Container
 from support_bot.conversation.service import ConversationService
 from support_bot.escalation.service import SentimentEscalationService
+from support_bot.rbac import Role
 
 st.title("CUSTOMER SERVICE CHATBOT 🤖")
 
@@ -22,6 +25,8 @@ if "session_id" not in st.session_state:
     st.session_state["session_id"] = str(uuid.uuid4())
 if "fake_clock" not in st.session_state:
     st.session_state["fake_clock"] = None   # None → use real SystemClock
+if "user_role" not in st.session_state:
+    st.session_state["user_role"] = "customer"
 
 # ── Shared resources ───────────────────────────────────────────────────────────
 conn = get_connection()
@@ -31,9 +36,14 @@ cfg = get_config(conn)
 demo_enabled = cfg.get("demo_panel_enabled", False)
 clock = st.session_state["fake_clock"] or SystemClock()
 
+container = Container(conn=conn, clock=clock, auto_migrate=False)
+kb_pipeline = container.get_knowledge_pipeline()
+rag_svc = container.get_rag_service(pipeline=kb_pipeline)
+
 # Service instance for due jobs and escalations
 esc_svc = SentimentEscalationService(conn=conn, clock=clock, config=cfg, auto_migrate=False)
 esc_svc.process_due_jobs()
+container.job_queue.run_due()
 
 # ── Knowledgebase builder ──────────────────────────────────────────────────────
 btn = st.button("Create Knowledgebase")
@@ -75,15 +85,33 @@ if question:
                 answer = clarification
             else:
                 query_to_run = conv_resp.normalized_query or question
-                chain = get_qa_chain(tone_instruction=tone)
-                raw_response = chain(query_to_run)
-                answer = service.format_reply(conv_resp, raw_response["result"])
+                active_ver = kb_pipeline.get_active_version()
+                if active_ver:
+                    rag_res = rag_svc.answer(
+                        question=query_to_run,
+                        user_role=st.session_state["user_role"],
+                        session_id=st.session_state["session_id"],
+                    )
+                    answer = service.format_reply(conv_resp, rag_res.answer)
+                else:
+                    chain = get_qa_chain(tone_instruction=tone)
+                    raw_response = chain(query_to_run)
+                    answer = service.format_reply(conv_resp, raw_response["result"])
 
         else:
-            # Original direct QA behavior (no conversation module)
-            chain = get_qa_chain(tone_instruction=tone)
-            raw_response = chain(question)
-            answer = raw_response["result"]
+            # Direct QA behavior
+            active_ver = kb_pipeline.get_active_version()
+            if active_ver:
+                rag_res = rag_svc.answer(
+                    question=question,
+                    user_role=st.session_state["user_role"],
+                    session_id=st.session_state["session_id"],
+                )
+                answer = rag_res.answer
+            else:
+                chain = get_qa_chain(tone_instruction=tone)
+                raw_response = chain(question)
+                answer = raw_response["result"]
 
     st.header("Answer")
     st.write(answer)
@@ -102,6 +130,16 @@ if question:
 if demo_enabled:
     with st.sidebar:
         st.header("🛠 Debug / Demo Panel")
+
+        # Requester Role Selector
+        st.subheader("👤 Requester Authorization")
+        current_role = st.session_state.get("user_role", "customer")
+        role_options = ["customer", "internal", "admin"]
+        role_idx = role_options.index(current_role) if current_role in role_options else 0
+        selected_role = st.selectbox("Role / Access Level:", role_options, index=role_idx)
+        if selected_role != current_role:
+            st.session_state["user_role"] = selected_role
+            st.rerun()
 
         # Simulated clock controls
         st.subheader("🕐 Simulated Clock")
@@ -128,11 +166,45 @@ if demo_enabled:
                 st.session_state["fake_clock"] = None
                 st.rerun()
 
+        # Knowledge Base & RAG Pipeline Controls
+        st.subheader("📚 Knowledge Base Pipeline")
+        active_version = kb_pipeline.get_active_version()
+        if active_version:
+            st.success(f"Active Version: `{active_version.id}`")
+            st.caption(f"Docs: {active_version.document_count} | Chunks: {active_version.chunk_count} | Quality: {active_version.quality_score:.2f}")
+        else:
+            st.info("Active Version: None (using dataset.csv fallback)")
+
+        if st.button("📥 Ingest Inbox & Update Index"):
+            with st.spinner("Ingesting knowledge inbox..."):
+                ingest_res = kb_pipeline.ingest_inbox_and_update(user_role=st.session_state["user_role"])
+            if ingest_res["status"] == "active":
+                st.success(f"Activated version `{ingest_res['version_id']}`")
+            elif ingest_res["status"] == "scheduled":
+                st.warning(f"Scheduled activation for `{ingest_res['version_id']}` (outside maintenance window)")
+            else:
+                st.error(f"Update failed quality gate: `{ingest_res.get('error')}`")
+            st.rerun()
+
+        # Admin Rollback
+        if st.session_state["user_role"] == "admin":
+            st.markdown("**Admin Version Rollback:**")
+            all_versions = kb_pipeline.list_versions()
+            if all_versions:
+                v_ids = [v.id for v in all_versions if not v.is_active]
+                if v_ids:
+                    target_ver = st.selectbox("Rollback to:", v_ids)
+                    if st.button("⏪ Rollback"):
+                        kb_pipeline.rollback_to(target_ver, actor="admin_ui", user_role=Role.ADMIN)
+                        st.success(f"Rolled back to `{target_ver}`")
+                        st.rerun()
+
         # Background Jobs / Due Escalations Trigger
         st.subheader("⚙️ Background Jobs")
         if st.button("▶️ Run due jobs"):
-            due_processed = esc_svc.process_due_jobs()
-            st.success(f"Processed {len(due_processed)} due job(s).")
+            due_esc = esc_svc.process_due_jobs()
+            due_kb = container.job_queue.run_due()
+            st.success(f"Processed {len(due_esc)} escalation job(s) and {len(due_kb)} background job(s).")
             st.rerun()
 
         # Sentiment display

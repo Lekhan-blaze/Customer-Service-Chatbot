@@ -1,0 +1,12 @@
+[SYNTHETIC TEST DOCUMENT - CONFIDENTIAL INTERNAL USE ONLY]
+Document Title: Internal Tier 2 Support Escalation Guide
+Product: All Support
+Region: Global
+Access Level: Internal
+
+1. Confidential Authorization Matrix:
+Only Tier 2 supervisors and administrators may issue discretionary refunds exceeding $500 without managerial signoff.
+2. On-Call Engineer Paging:
+For severity 1 system outages or widespread billing errors outside business hours, page the on-call engineer at pager #911.
+3. Access Control:
+This guide is strictly restricted to internal staff. Do not share or quote to customers.

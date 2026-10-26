@@ -1,0 +1,10 @@
+{
+  "id": "doc_refund_v2",
+  "version": 2,
+  "title": "Course Refund Policy v2",
+  "product": "courses",
+  "region": "global",
+  "access_level": "customer",
+  "effective_date": "2026-01-02",
+  "expiry_date": null
+}

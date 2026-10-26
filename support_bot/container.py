@@ -68,6 +68,29 @@ class Container:
             self._conversation_service = self.get_conversation_service()
         return self._conversation_service
 
+    def get_knowledge_pipeline(self, embedder=None):
+        """Return KnowledgePipeline wired with container services."""
+        from support_bot.knowledge.pipeline import KnowledgePipeline
+        return KnowledgePipeline(
+            conn=self.conn,
+            clock=self.clock,
+            config=self.config,
+            audit=self.audit,
+            job_queue=self.job_queue,
+            embedder=embedder,
+        )
+
+    def get_rag_service(self, pipeline=None, claim_validator=None):
+        """Return RagService wired with container services."""
+        from support_bot.rag.service import RagService
+        pipe = pipeline or self.get_knowledge_pipeline()
+        return RagService(
+            pipeline=pipe,
+            clock=self.clock,
+            audit=self.audit,
+            claim_validator=claim_validator,
+        )
+
     def close(self) -> None:
         """Close the database connection."""
         self.conn.close()

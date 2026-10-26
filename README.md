@@ -253,3 +253,91 @@ pytest tests/test_sentiment_escalation.py -v
 | PII masking in stored sentiment | `tests/test_sentiment_escalation.py` | `test_pii_masked_in_stored_sentiment` |
 
 
+
+
+---
+
+## Module 3: Knowledge-Base Pipeline
+
+### Overview
+A lean, secure knowledge-base ingestion and activation pipeline supporting immutable index versioning, quarantine for unsafe or malicious uploads, quality gates, scheduled activation inside maintenance windows, automatic health-check rollbacks, and role-based access control.
+
+### Architecture & Lifecycle
+1. **Inbox Discovery & Metadata Validation**: Processes `.txt`, `.md`, and `.csv` files alongside `.meta.json` sidecars in `knowledge_inbox/`. Duplicates (same content SHA256) are skipped idempotently.
+2. **Quarantine & Prompt Injection Defense**: Files failing type allowlists, exceeding size bounds (>1MB), or containing prompt injections (e.g. system override instructions) are rejected and stored in `kb_quarantine` with risk scores and auditable reasons.
+3. **Immutable Version Building**: Each build creates an isolated index directory under `faiss_index/versions/<id>/`. The active version pointer is never overwritten in place.
+4. **Automated Quality Gate**: Evaluates candidate indices against `tests/data/golden_qa.json`. Requires minimum retrieval hit rate and grounding scores; rejects updates that degrade below active scores.
+5. **Scheduled Maintenance Activation**: Activations only take effect inside the configured maintenance window (`maintenance_window: 02:00-04:00`). Updates requested outside this window are automatically enqueued via `JobQueue` for activation during the window.
+6. **Post-Activation Health Checks & Auto-Rollback**: After activation, health checks verify index search integrity. If a check fails, the pipeline immediately rolls back to the previous stable version.
+7. **Failed Update Retries**: Failed updates trigger retries at 15, 30, and 60 minutes via the job queue, recording each attempt in the audit log.
+8. **RBAC & Manual Rollback**: Only `admin` role may execute manual rollbacks. `ingestor` builds versions, `approver` approves, and `activator` triggers activation.
+
+### Configuration Keys (`config/defaults.yaml`)
+- `maintenance_window.start`: Start time for index updates (default `"02:00"`).
+- `maintenance_window.end`: End time for index updates (default `"04:00"`).
+- `knowledge.min_hit_rate`: Minimum retrieval hit rate threshold for quality gate (default `0.80`).
+- `knowledge.min_grounding_score`: Minimum grounding score threshold (default `0.75`).
+- `knowledge.auto_rollback_window_seconds`: Time window for post-activation health checks (default `300`).
+
+### Synthetic Policy Documents (`knowledge_inbox/`)
+- `refund_policy_v1.txt` + `.meta.json`: Expired 7-day refund policy (active 2025, expired 2026-01-01).
+- `refund_policy_v2.txt` + `.meta.json`: Current 14-day refund policy with immediate duplicate charge refunds.
+- `refund_policy_v3.txt` + `.meta.json`: Future-dated 30-day money-back guarantee (effective 2026-12-01).
+- `internal_escalation_guide.txt` + `.meta.json`: Internal-only escalation policy for Tier 2 supervisors.
+- `india_fee_policy.txt` + `.meta.json`: Region-specific GST and processing fee policy.
+- `malicious_prompt_injection.txt` + `.meta.json`: Synthetic malicious document containing injection triggers to verify quarantine.
+
+### Requirement-to-Test Mapping Table
+| Requirement | Test Module | Test Case |
+|---|---|---|
+| Legal & illegal state transitions | `tests/test_knowledge_pipeline.py` | `test_state_machine_legal_and_illegal_transitions` |
+| Valid file ingestion & chunking | `tests/test_knowledge_pipeline.py` | `test_ingest_document_success_and_chunking` |
+| Idempotent duplicate skipping (content hash) | `tests/test_knowledge_pipeline.py` | `test_duplicate_document_skipped` |
+| Invalid file types & oversized files quarantined | `tests/test_knowledge_pipeline.py` | `test_invalid_extension_and_oversized_file_quarantined` |
+| Malicious prompt injections quarantined | `tests/test_knowledge_pipeline.py` | `test_malicious_prompt_injection_quarantined` |
+| RBAC on ingest, approve, activate, rollback | `tests/test_knowledge_pipeline.py` | `test_rbac_enforcement_on_pipeline_actions` |
+| Maintenance window scheduling outside window | `tests/test_knowledge_pipeline.py` | `test_maintenance_window_activation_scheduling` |
+| Degraded quality gate rejection | `tests/test_knowledge_pipeline.py` | `test_degraded_quality_gate_rejected` |
+| Manual rollback by admin with audit logging | `tests/test_knowledge_pipeline.py` | `test_manual_rollback_by_admin` |
+| Failed updates retry at 15, 30, 60 minutes | `tests/test_knowledge_pipeline.py` | `test_failed_update_schedules_retries_15_30_60` |
+| Health-check failure triggers automatic rollback | `tests/test_knowledge_pipeline.py` | `test_health_check_auto_rollback_within_5_minutes` |
+
+### What is Simplified
+- Embedded vector store utilizes cosine similarity with normalized TF-IDF downweighting in test suites for fast, deterministic unit test execution without requiring API keys or model downloads.
+- Maintenance window schedule executes via the injectable `JobQueue` and `FakeClock`.
+
+---
+
+## Module 4: Secure RAG Layer
+
+### Overview
+Enterprise RAG retrieval layer enforcing strict pre-retrieval authorization guards, temporal policy selection, citation generation, prompt-injection neutralization on retrieved passages, and claim-to-source validation.
+
+### Key Capabilities
+1. **Pre-Retrieval Metadata Guards**: Authorization (`customer` vs `internal`), region (`IN` vs `GLOBAL`), and policy dates are filtered BEFORE vector ranking, ensuring non-qualifying passages never reach LLM context or candidates.
+2. **Temporal Policy Handling**:
+   - Current queries automatically ignore future-dated policies and expired policies.
+   - Historical queries (e.g., *"What was the refund policy on 5 March 2025?"*) extract the target date and retrieve the policy active on that date.
+   - Conflict resolution: When multiple versions match, the latest version takes precedence.
+3. **Mandatory Citations**: Every factual answer includes structured citations: document title, version number, and source locator.
+4. **Untrusted Passage Defense**: Passages undergo prompt injection inspection; instructions attempting system overrides or credential leaks are neutralized.
+5. **Claim-to-Source Validation**: Verifies generated answers against retrieved passages before returning to the user, stripping unsupported or hallucinated claims.
+6. **Fallback Behavior**: If evidence is missing, conflicting, or below retrieval thresholds, securely falls back to `"I don't know."`.
+
+### Requirement-to-Test Mapping Table
+| Requirement | Test Module | Test Case |
+|---|---|---|
+| Query date extraction (historical vs current) | `tests/test_secure_rag.py` | `test_parse_date_from_query` |
+| Current questions use active policy v2 (ignoring v1, v3) | `tests/test_secure_rag.py` | `test_current_question_uses_active_policy_v2` |
+| Historical date queries return policy active on that date | `tests/test_secure_rag.py` | `test_historical_date_question_returns_policy_active_then` |
+| Future-dated policies ignored for current questions | `tests/test_secure_rag.py` | `test_future_dated_policy_ignored_for_current_questions` |
+| Restricted documents hidden from customers | `tests/test_secure_rag.py` | `test_restricted_document_hidden_from_customer_visible_to_internal` |
+| Missing evidence triggers safe refusal ("I don't know.") | `tests/test_secure_rag.py` | `test_missing_evidence_refuses` |
+| Mandatory citations on factual answers | `tests/test_secure_rag.py` | `test_citation_present_on_every_factual_answer` |
+| Unsupported claim removed by validator | `tests/test_secure_rag.py` | `test_unsupported_claim_removed_by_validator` |
+| Latest policy version wins in conflicts | `tests/test_secure_rag.py` | `test_conflicting_policies_latest_wins` |
+| Malicious instructions in documents suppressed | `tests/test_secure_rag.py` | `test_malicious_instruction_in_retrieved_document_suppressed` |
+
+### What is Simplified
+- Claim-to-source validation uses an interface (`BaseClaimValidator`) backed by token-overlap claim verification in tests and LLM factual verification in production.
+- Natural date parsing supports ISO-8601, day-month-year, and month-day-year patterns.

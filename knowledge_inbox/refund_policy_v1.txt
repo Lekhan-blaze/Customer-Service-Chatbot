@@ -1,0 +1,12 @@
+[SYNTHETIC TEST DOCUMENT - NOT REAL POLICY]
+Document Title: EdTech Course Refund Policy (Version 1.0 - Expired)
+Product: Online Courses
+Region: Global
+Access Level: Customer
+
+1. Eligibility Window:
+Students may request a refund within 7 days of course purchase if less than 10% of course content has been viewed.
+2. Processing:
+Refunds are processed within 10 business days back to the original payment method.
+3. Expiry:
+This policy was active during 2025 and expired on 2026-01-01.

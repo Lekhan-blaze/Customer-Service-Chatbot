@@ -1,0 +1,14 @@
+[SYNTHETIC TEST DOCUMENT - NOT REAL POLICY]
+Document Title: EdTech Course Refund Policy (Version 2.0 - Active Current Policy)
+Product: Online Courses
+Region: Global
+Access Level: Customer
+
+1. Eligibility Window:
+Students may request a full refund within 14 days of course purchase if less than 25% of course videos have been accessed.
+2. Duplicate Charges:
+In the event of duplicate or accidental double billing, 100% refund of the extra charge is initiated immediately with no deductions.
+3. Processing Timeline:
+Standard refunds take 5 to 7 business days to reflect on the customer credit card or bank account.
+4. Effective Date:
+Effective starting 2026-01-02 until further notice.

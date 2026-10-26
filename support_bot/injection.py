@@ -92,3 +92,21 @@ def detect_injection(
             max_score = max(max_score, weight)
 
     return InjectionResult(score=max_score, reasons=matched, _threshold=threshold)
+
+
+class PromptInjectionDetector:
+    """Configurable OOP wrapper around detect_injection."""
+
+    def __init__(self, config: dict | None = None, threshold: float = 0.6):
+        self.config = config or {}
+        self.threshold = self.config.get("injection", {}).get("threshold", threshold)
+
+    def detect(self, text: str, source_type: str = "document"):
+        r = detect_injection(text, threshold=self.threshold)
+        class AdaptedResult:
+            def __init__(self, result: InjectionResult, st: str):
+                self.is_injection = result.is_risky
+                self.risk_score = result.score
+                self.matched_reasons = result.reasons
+                self.source_type = st
+        return AdaptedResult(r, source_type)

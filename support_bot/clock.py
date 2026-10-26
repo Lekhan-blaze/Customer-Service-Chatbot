@@ -157,3 +157,18 @@ def add_business_time(
             current = _dt.datetime.combine(d, bh_start, tzinfo=tz)
 
     return current
+
+
+def is_maintenance_window(
+    clock: Clock,
+    cfg: dict,
+) -> bool:
+    """True if the clock's current time falls within configured maintenance window."""
+    tz = ZoneInfo(cfg.get("company_timezone", "Asia/Kolkata"))
+    now = clock.now(tz)
+    mw = cfg.get("maintenance_window", {})
+    start = _parse_time(mw.get("start", "02:00"))
+    end = _parse_time(mw.get("end", "04:00"))
+    if start <= end:
+        return start <= now.time() < end
+    return now.time() >= start or now.time() < end

@@ -1,0 +1,10 @@
+{
+  "id": "doc_india_fee_policy",
+  "version": 1,
+  "title": "India Regional Fee Policy",
+  "product": "courses",
+  "region": "IN",
+  "access_level": "customer",
+  "effective_date": "2026-01-01",
+  "expiry_date": null
+}

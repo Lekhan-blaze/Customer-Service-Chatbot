@@ -1,0 +1,12 @@
+[SYNTHETIC TEST DOCUMENT - NOT REAL POLICY]
+Document Title: India Regional Fee and GST Tax Guidelines
+Product: Online Courses
+Region: IN
+Access Level: Customer
+
+1. Goods and Services Tax (GST):
+All purchases made by customers residing in India are subject to 18% Goods and Services Tax (GST).
+2. Payment Gateways in India:
+Supported payment methods in India include UPI, RuPay cards, NetBanking, and domestic credit cards.
+3. Tax Invoices:
+GST invoices are issued within 24 hours of payment and include the institution GSTIN.

@@ -85,3 +85,40 @@ def require_permission(permission: str) -> Callable:
         return wrapper
 
     return decorator
+
+
+from enum import Enum
+
+
+class Role(str, Enum):
+    VIEWER = "viewer"
+    INTERNAL = "internal"
+    INGESTOR = "ingestor"
+    APPROVER = "approver"
+    ACTIVATOR = "activator"
+    ADMIN = "admin"
+    CUSTOMER = "customer"
+    SYSTEM = "system"
+
+
+class Permission(str, Enum):
+    READ = "read"
+    INGEST = "ingest"
+    APPROVE = "approve"
+    ACTIVATE = "activate"
+    ADMIN = "admin"
+    CONFIGURE = "configure"
+    KB_INGEST = "ingest"
+    KB_APPROVE = "approve"
+    KB_ACTIVATE = "activate"
+    KB_READ = "read"
+
+
+def check_role_permission(role: str | Role, permission: str | Permission) -> bool:
+    """Check if a role has a given permission without database lookup."""
+    r_str = role.value if isinstance(role, Role) else str(role).lower()
+    p_str = permission.value if isinstance(permission, Permission) else str(permission).lower()
+    if r_str == "admin":
+        return True
+    perms = DEFAULT_ROLES.get(r_str, [])
+    return p_str in perms
