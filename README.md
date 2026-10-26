@@ -341,3 +341,91 @@ Enterprise RAG retrieval layer enforcing strict pre-retrieval authorization guar
 ### What is Simplified
 - Claim-to-source validation uses an interface (`BaseClaimValidator`) backed by token-overlap claim verification in tests and LLM factual verification in production.
 - Natural date parsing supports ISO-8601, day-month-year, and month-day-year patterns.
+
+---
+
+## Module 2: Structured Ticket Generation, Routing, Duplicate Detection, and SLA Tracking
+
+### Overview
+Automated support ticket lifecycle engine with dynamic field validation, skill-based team routing, duplicate detection across configurable time windows, business-hours SLA target calculation, warning/breach escalation tracking, and masked handoff summaries.
+
+### Key Capabilities
+1. **Mandatory Field Validation**: Dynamically validates required fields (`customer_name`, `order_or_enrollment_id`, `product_or_course`, `issue_type`, `description`). If any field is missing, sets ticket status to `pending_info` and prompts for missing data.
+2. **Skill-Based Team Routing**: Routes tickets to appropriate resolver teams (`billing`, `technical`, `academic`) based on issue taxonomy and skill mappings. If a team is unavailable or over capacity, seamlessly routes to `fallback_team` (`general_support`).
+3. **Duplicate Detection & Linking**: Detects duplicate issues from the same customer within a configurable window (default 24 hours). Instead of creating fragmented records, links duplicate tickets to the original root ticket with reason tracking.
+4. **Business Hours SLA Tracking**: Computes SLA deadlines strictly within company business hours (`Mon-Fri 09:00-18:00 Asia/Kolkata`), skipping weekends and declared company holidays.
+   - P1: 4 business hours
+   - P2: 8 business hours
+   - P3: 24 business hours
+   - P4: 48 business hours
+5. **Proactive Warning & Breach Escalation**: Fires an SLA warning when elapsed business time reaches 75% of the deadline, and escalates to breached when deadline passes.
+6. **Masked Handoff Summaries**: Generates human-agent handoff briefs with all PII and sensitive payment details masked.
+
+### Configuration Keys (`config/defaults.yaml`)
+- `tickets.mandatory_fields`: List of mandatory field names.
+- `tickets.sla_hours_by_priority`: Business hours per priority (`P1: 4`, `P2: 8`, `P3: 24`, `P4: 48`).
+- `tickets.warning_threshold_ratio`: Ratio of SLA elapsed to trigger warning (default `0.75`).
+- `tickets.teams`: Team skill mappings, availability, and capacity limits.
+- `tickets.fallback_team`: Default fallback resolver team (`"general_support"`).
+
+### Requirement-to-Test Mapping Table
+| Requirement | Test Module | Test Case |
+|---|---|---|
+| Missing mandatory fields prompts clarification (`pending_info`) | `tests/test_tickets.py` | `test_missing_mandatory_fields_asks_for_clarification` |
+| Valid ticket created with assigned team & SLA target | `tests/test_tickets.py` | `test_successful_ticket_creation_and_routing` |
+| Unavailable team falls back to general support | `tests/test_tickets.py` | `test_unavailable_team_falls_back_to_general_support` |
+| Duplicate issue within 24h linked to original ticket | `tests/test_tickets.py` | `test_duplicate_ticket_linked_to_original` |
+| Different order or customer treated as distinct ticket | `tests/test_tickets.py` | `test_related_vs_unrelated_issues` |
+| Business hours SLA skips weekends and company holidays | `tests/test_tickets.py` | `test_weekend_and_holiday_skipping_in_sla_deadline` |
+| SLA warning at 75% elapsed and breach escalation | `tests/test_tickets.py` | `test_sla_warning_at_75_percent_and_breach_escalation` |
+| Runtime SLA configuration overrides | `tests/test_tickets.py` | `test_runtime_sla_config_change` |
+| PII and payment data masked in handoff summary | `tests/test_tickets.py` | `test_masked_handoff_summary` |
+
+---
+
+## Module 5: Multimodal Evidence Processing (Uploads, OCR, Mismatches, Retention)
+
+### Overview
+End-to-end evidence ingestion and verification pipeline for handling customer attachments (screenshots, receipts, invoices, error photos, PDFs) with security controls, OCR extraction, discrepancy detection, and automated retention management.
+
+### Key Capabilities
+1. **Security & Validation Controls**:
+   - MIME and file extension allowlist (`.png`, `.jpg`, `.jpeg`, `.pdf`).
+   - File size ceiling enforcement (default max 10MB; configurable).
+   - Antivirus / malware scan stub (rejects EICAR test signatures).
+   - Filename sanitization against path traversal and dangerous characters.
+2. **Deterministic & Vision OCR Extraction**:
+   - Pluggable OCR interface (`BaseOCR`) with `FakeOCR` for fast deterministic testing and `GeminiVisionOCR` for live multimodal visual extraction.
+   - Extracts structured transaction entities: order ID, invoice number, amount, transaction date, and card last 4 digits.
+3. **Prompt Injection Quarantine**: Scans extracted text with the shared prompt injection detector. Injections are quarantined and scrubbed from stored text.
+4. **Mismatch & Low-Confidence Detection**:
+   - Detects discrepancies between customer-stated claims and OCR-extracted fields (e.g., claiming ₹14,999 when receipt shows ₹9,999).
+   - Generates structured conflict reports and clarification prompts for customer confirmation.
+   - Flags low-confidence or blurry scans to request manual confirmation.
+5. **PII Masking & Automated Retention**:
+   - Masks sensitive customer data (card numbers, phone, email) in stored OCR representations.
+   - Configurable retention window (default 30 days). Expired uploads are purged from disk and marked as purged in database.
+   - Automatically enqueues background retention purge jobs via `JobQueue`.
+
+### Configuration Keys (`config/defaults.yaml`)
+- `files.allowed_extensions`: Permitted extensions (`[.png, .jpg, .jpeg, .pdf]`).
+- `files.max_size_bytes`: Maximum upload payload size (`10485760` bytes / 10MB).
+- `files.retention_days`: Retention lifespan before disk purge (default `30` days).
+- `files.ocr_confidence_threshold`: Minimum confidence threshold for automated acceptance (`0.5`).
+
+### Requirement-to-Test Mapping Table
+| Requirement | Test Module | Test Case |
+|---|---|---|
+| Allowed file extension accepted | `tests/test_files_ocr.py` | `test_allowed_extension_accepted` |
+| Disallowed executable / script rejected | `tests/test_files_ocr.py` | `test_disallowed_extension_rejected` |
+| Oversized payload rejected | `tests/test_files_ocr.py` | `test_oversized_file_rejected` |
+| Malware EICAR signature rejected | `tests/test_files_ocr.py` | `test_eicar_malware_signature_rejected` |
+| Directory traversal filenames sanitized | `tests/test_files_ocr.py` | `test_safe_filename_sanitizes_path_traversal` |
+| Structured OCR extraction (order ID, amount) | `tests/test_files_ocr.py` | `test_successful_ocr_extracts_order_id_and_amount` |
+| Prompt injection in upload flagged & sanitized | `tests/test_files_ocr.py` | `test_injection_in_uploaded_document_flagged` |
+| Low confidence scan generates clarification report | `tests/test_files_ocr.py` | `test_low_confidence_ocr_generates_conflict_report` |
+| Discrepancy between claim and receipt flagged | `tests/test_files_ocr.py` | `test_amount_mismatch_generates_conflict_report` |
+| Matching claim generates zero conflicts | `tests/test_files_ocr.py` | `test_matching_claims_generate_no_conflict` |
+| PII / payment data masked in stored OCR text | `tests/test_files_ocr.py` | `test_pii_masked_in_stored_ocr_text` |
+| Expired file purged from filesystem & DB updated | `tests/test_files_ocr.py` | `test_expired_file_purged_from_disk` |
+| Background purge job enqueued on upload | `tests/test_files_ocr.py` | `test_purge_job_enqueued_on_upload` |

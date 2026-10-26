@@ -11,7 +11,7 @@ _PATTERNS: list[tuple[str, re.Pattern, str]] = [
     # Email
     ("email", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[EMAIL]"),
     # Phone numbers — Indian 10-digit with optional +91 / 0 prefix
-    ("phone", re.compile(r"(?:\+91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}"), "[PHONE]"),
+    ("phone", re.compile(r"(?:\+91[\s-]?|0)?[6-9]\d{4}[\s-]?\d{5}|(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}"), "[PHONE]"),
     # Credit/debit card numbers (13-19 digits, optionally grouped by - or spaces)
     ("card", re.compile(r"\b(?:\d[ -]?){13,19}\b"), "[CARD]"),
     # Indian bank account (9-18 digits)
@@ -74,3 +74,7 @@ class MaskingFilter(logging.Filter):
                     mask_pii(str(a)) if isinstance(a, str) else a for a in record.args
                 )
         return True
+
+
+# Alias for payment-specific masking
+mask_payment = mask_pii

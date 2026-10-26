@@ -1,0 +1,11 @@
+INVOICE
+
+Order ID: ORD-998811
+Invoice No: INV-2026-0041
+Date: 15/04/2026
+Course: Python Full Stack Bootcamp
+
+Amount Charged: Rs. 14,999
+Payment Method: Card ending in 4242
+
+Thank you for your purchase!

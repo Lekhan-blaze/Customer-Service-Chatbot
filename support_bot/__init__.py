@@ -12,6 +12,8 @@ from support_bot.conversation import (
     ConversationResponse,
     ConversationService,
 )
+from support_bot.tickets import TicketService, Ticket, TicketPriority, TicketStatus
+from support_bot.files import FileService, FileUploadRecord, OcrResult, ConflictReport
 from support_bot.rbac import (
     DEFAULT_ROLES,
     assign_role,
@@ -54,4 +56,12 @@ __all__ = [
     "has_permission",
     "require_permission",
     "revoke_role",
+    "TicketService",
+    "Ticket",
+    "TicketPriority",
+    "TicketStatus",
+    "FileService",
+    "FileUploadRecord",
+    "OcrResult",
+    "ConflictReport",
 ]

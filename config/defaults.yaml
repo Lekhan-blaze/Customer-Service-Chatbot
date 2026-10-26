@@ -90,3 +90,47 @@ escalation:
   - legal_threat
   - data_breach
 demo_panel_enabled: true
+
+tickets:
+  enabled: true
+  mandatory_fields:
+    - customer_name
+    - order_or_enrollment_id
+    - product_or_course
+    - issue_type
+    - description
+  sla_hours_by_priority:
+    P1: 4
+    P2: 8
+    P3: 24
+    P4: 48
+  warning_threshold_ratio: 0.75
+  teams:
+    billing:
+      skills: ["payment", "duplicate_payment", "refund", "invoice", "fee"]
+      available: true
+      max_workload: 10
+      current_workload: 0
+    technical:
+      skills: ["course_access", "video_error", "login", "bug", "platform"]
+      available: true
+      max_workload: 15
+      current_workload: 0
+    academic:
+      skills: ["curriculum", "mentor", "assignment", "certificate", "syllabus"]
+      available: true
+      max_workload: 12
+      current_workload: 0
+  fallback_team: "general_support"
+
+files:
+  enabled: true
+  allowed_extensions:
+    - .png
+    - .jpg
+    - .jpeg
+    - .pdf
+  max_size_bytes: 10485760  # 10 MB
+  retention_days: 30
+  ocr_confidence_threshold: 0.5
+  long_running_threshold_seconds: 30

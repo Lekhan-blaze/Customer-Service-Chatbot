@@ -91,6 +91,33 @@ class Container:
             claim_validator=claim_validator,
         )
 
+
+    def get_ticket_service(self):
+        """Return TicketService wired with container dependencies."""
+        from support_bot.tickets.service import TicketService
+        return TicketService(
+            conn=self.conn,
+            clock=self.clock,
+            config=self.config,
+            audit=self.audit,
+            job_queue=self.job_queue,
+            auto_migrate=False,
+        )
+
+    def get_file_service(self, ocr_engine=None, storage_root: str = "storage/uploads"):
+        """Return FileService wired with container dependencies."""
+        from support_bot.files.service import FileService
+        return FileService(
+            conn=self.conn,
+            clock=self.clock,
+            config=self.config,
+            audit=self.audit,
+            job_queue=self.job_queue,
+            ocr_engine=ocr_engine,
+            storage_root=storage_root,
+            auto_migrate=False,
+        )
+
     def close(self) -> None:
         """Close the database connection."""
         self.conn.close()

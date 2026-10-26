@@ -38,3 +38,14 @@ def test_migrations_idempotent(db_conn):
     # Running migrations again should be a no-op and return same version
     v2 = run_migrations(db_conn)
     assert v2 == v1
+
+
+def test_container_services_resolution(container):
+    t_svc = container.get_ticket_service()
+    assert t_svc is not None
+    f_svc = container.get_file_service()
+    assert f_svc is not None
+    kp = container.get_knowledge_pipeline()
+    assert kp is not None
+    rag = container.get_rag_service(pipeline=kp)
+    assert rag is not None
