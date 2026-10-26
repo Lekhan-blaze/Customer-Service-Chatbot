@@ -336,7 +336,7 @@ class TestGeminiSentimentAnalyzerParsing:
         result = analyzer.analyze("test", config=_make_config())
         assert result.risk_category is None
 
-    def test_llm_exception_returns_neutral_fallback(self):
+    def test_llm_exception_uses_heuristic_fallback(self):
         from support_bot.sentiment.analyzer import GeminiSentimentAnalyzer
 
         class ErrorLLM:
@@ -345,9 +345,10 @@ class TestGeminiSentimentAnalyzerParsing:
 
         analyzer = GeminiSentimentAnalyzer.__new__(GeminiSentimentAnalyzer)
         analyzer.llm = ErrorLLM()
-        result = analyzer.analyze("anything", config=_make_config())
-        assert result.low_confidence is True
-        assert result.dominant_label == "neutral"
+        result = analyzer.analyze("I was charged twice", config=_make_config())
+        assert result.low_confidence is False
+        assert result.risk_category == "duplicate_payment"
+        assert result.dominant_label == "frustrated"
 
     def test_markdown_code_block_stripped(self):
         from support_bot.sentiment.analyzer import GeminiSentimentAnalyzer

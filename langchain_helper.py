@@ -9,8 +9,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
 # LLM and prompts
-from langchain_google_genai import GoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
+from support_bot.llm import make_gemini_llm
 
 # Retrieval QA chain
 try:
@@ -32,17 +32,20 @@ VECTORDB_FILE_PATH = "faiss_index"
 # ---------------------------------------------------------------------------
 # Initialize Gemini LLM
 # ---------------------------------------------------------------------------
-llm = GoogleGenerativeAI(
-    model="gemini-3.8-flash",
-    google_api_key=os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "fake_key_for_offline_testing",
-    temperature=0.1,
-    request_timeout=10.0,
-)
+llm = make_gemini_llm(temperature=0.1, timeout=45.0)
 
 # ---------------------------------------------------------------------------
 # Embedding model
 # ---------------------------------------------------------------------------
-embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+# The app may run without internet access.  The model is bundled in the local
+# Hugging Face cache after the first install; asking the hub for an update on
+# every Streamlit start causes long retry delays before the chat can respond.
+# `local_files_only` uses that cache immediately and gives a clear error if a
+# fresh machine still needs the model downloaded.
+embeddings = HuggingFaceEmbeddings(
+    model_name=EMBEDDING_MODEL_NAME,
+    model_kwargs={"local_files_only": True},
+)
 
 
 def create_vector_db():
@@ -124,6 +127,31 @@ def get_qa_chain(tone_instruction: str = "neutral"):
     )
 
     return chain
+
+
+def retrieve_faq_answer(query: str, k: int = 2) -> str:
+    """Return the closest FAQ response without calling Gemini.
+
+    Used when the LLM is rate-limited or returns empty text so the UI still answers.
+    """
+    if not os.path.exists(VECTORDB_FILE_PATH):
+        create_vector_db()
+
+    vectordb = FAISS.load_local(
+        VECTORDB_FILE_PATH,
+        embeddings,
+        allow_dangerous_deserialization=True,
+    )
+    docs = vectordb.similarity_search(query, k=k)
+    if not docs:
+        return "I don't know."
+
+    text = (docs[0].page_content or "").strip()
+    lower = text.lower()
+    key = "response:"
+    if key in lower:
+        return text[lower.index(key) + len(key) :].strip().strip('"')
+    return text or "I don't know."
 
 
 if __name__ == "__main__":

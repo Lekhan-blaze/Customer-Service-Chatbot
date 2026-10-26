@@ -11,7 +11,6 @@ Integrates all 6 modules:
 
 import uuid
 import streamlit as st
-from langchain_helper import get_qa_chain, create_vector_db
 from support_bot.config import get_config
 from support_bot.db import get_connection, run_migrations
 from support_bot.clock import FakeClock, SystemClock
@@ -61,6 +60,9 @@ with col_kb_btn:
     btn = st.button("Create Knowledgebase")
     if btn:
         with st.spinner("Creating knowledgebase..."):
+            # Import lazily: loading the optional legacy FAQ embeddings should
+            # never delay the secure knowledge-base chat path at app startup.
+            from langchain_helper import create_vector_db
             create_vector_db()
         st.success("Knowledgebase created successfully!")
 
@@ -102,76 +104,106 @@ with st.expander("📎 Attach Document / Screenshot / Receipt (OCR Analysis)", e
                     st.write(f"- {c.clarification_prompt}")
 
 # ── User input (Chat) ──────────────────────────────────────────────────────────
-question = st.text_input("Question:")
+with st.form("ask_form", clear_on_submit=False):
+    question = st.text_input("Question:")
+    asked = st.form_submit_button("Ask")
 
-if question:
+if asked and question:
     conv_enabled = cfg.get("conversation", {}).get("enabled", True)
     sent_enabled = cfg.get("escalation", {}).get("enabled", True)
 
     with st.spinner("Finding answer..."):
+        from support_bot.llm import llm_text
+
         sentiment_result = None
         escalation_record = None
         clarification = None
         tone = "neutral"
         citations = []
+        answer = ""
 
-        if conv_enabled:
-            service = ConversationService(conn=conn, clock=clock, config=cfg, auto_migrate=False)
-            conv_resp = service.handle_message(st.session_state["session_id"], question)
-
-            # Sentiment & escalation
-            if sent_enabled:
-                sentiment_result, escalation_record, clarification = esc_svc.process_message(
-                    session_id=st.session_state["session_id"],
-                    text=question,
-                    context=conv_resp.context,
-                )
-                if sentiment_result:
-                    tone = sentiment_result.tone_instruction or "neutral"
-
-            if conv_resp.needs_clarification:
-                answer = conv_resp.clarification_question
-            elif clarification:
-                answer = clarification
-            else:
-                query_to_run = conv_resp.normalized_query or question
-                active_ver = kb_pipeline.get_active_version()
-                if active_ver:
-                    rag_res = rag_svc.answer(
-                        question=query_to_run,
-                        user_role=st.session_state["user_role"],
-                        session_id=st.session_state["session_id"],
-                    )
-                    answer = service.format_reply(conv_resp, rag_res.answer)
-                    citations = rag_res.citations
-                else:
-                    try:
-                        chain = get_qa_chain(tone_instruction=tone)
-                        raw_response = chain(query_to_run)
-                        answer = service.format_reply(conv_resp, raw_response["result"])
-                    except Exception as e:
-                        answer = f"I am unable to retrieve an answer at this time ({type(e).__name__}: {str(e)[:120]}). Please check your API key or try again later."
-
-        else:
+        def _faq_answer(query_text: str, reply_tone: str) -> tuple[str, list]:
             active_ver = kb_pipeline.get_active_version()
             if active_ver:
                 rag_res = rag_svc.answer(
-                    question=question,
+                    question=query_text,
                     user_role=st.session_state["user_role"],
                     session_id=st.session_state["session_id"],
                 )
-                answer = rag_res.answer
-                citations = rag_res.citations
-            else:
-                try:
-                    chain = get_qa_chain(tone_instruction=tone)
-                    raw_response = chain(question)
-                    answer = raw_response["result"]
-                except Exception as e:
-                    answer = f"I am unable to retrieve an answer at this time ({type(e).__name__}: {str(e)[:120]}). Please check your API key or try again later."
+                return rag_res.answer, rag_res.citations
+            try:
+                # The original CSV/FAISS FAQ flow is optional and is imported
+                # only when it is actually needed.
+                from langchain_helper import get_qa_chain, retrieve_faq_answer
+                chain = get_qa_chain(tone_instruction=reply_tone)
+                raw_response = chain.invoke({"query": query_text})
+                result = raw_response["result"] if isinstance(raw_response, dict) else raw_response
+                text = llm_text(result).strip()
+                if text:
+                    return text, []
+            except Exception:
+                pass
+            return retrieve_faq_answer(query_text), []
 
+        try:
+            if conv_enabled:
+                service = ConversationService(conn=conn, clock=clock, config=cfg, auto_migrate=False)
+                conv_resp = service.handle_message(st.session_state["session_id"], question)
+
+                if sent_enabled:
+                    sentiment_result, escalation_record, clarification = esc_svc.process_message(
+                        session_id=st.session_state["session_id"],
+                        text=question,
+                        context=conv_resp.context,
+                    )
+                    if sentiment_result:
+                        tone = sentiment_result.tone_instruction or "neutral"
+
+                if conv_resp.needs_clarification:
+                    answer = conv_resp.clarification_question
+                else:
+                    query_to_run = conv_resp.normalized_query or question
+                    raw_answer, citations = _faq_answer(query_to_run, tone)
+                    answer = service.format_reply(conv_resp, raw_answer)
+                    scores = (sentiment_result.calibrated_scores or {}) if sentiment_result else {}
+                    sentiment_failed = bool(
+                        sentiment_result
+                        and sentiment_result.low_confidence
+                        and not any(scores.values())
+                    )
+                    if clarification and not sentiment_failed:
+                        answer = f"{answer}\n\n{clarification}"
+            else:
+                answer, citations = _faq_answer(question, tone)
+        except Exception as e:
+            answer = (
+                f"I am unable to retrieve an answer at this time "
+                f"({type(e).__name__}: {str(e)[:180]}). Please check your API key or try again later."
+            )
+
+        if not (answer or "").strip():
+            answer = (
+                "I couldn't generate an answer just now. "
+                "Please click Ask again, or confirm GOOGLE_API_KEY is set in your .env file."
+            )
+
+        st.session_state["last_qa"] = {
+            "answer": answer,
+            "citations": citations,
+            "escalation_record": escalation_record,
+            "sentiment_result": sentiment_result,
+            "tone": tone,
+        }
+
+last_qa = st.session_state.get("last_qa")
+if last_qa:
     st.header("Answer")
-    st.write(answer)
+    st.write(last_qa["answer"])
+
+    citations = last_qa.get("citations") or []
+    escalation_record = last_qa.get("escalation_record")
+    sentiment_result = last_qa.get("sentiment_result")
+    tone = last_qa.get("tone", "neutral")
 
     # Citations
     if citations:
@@ -197,7 +229,8 @@ with col_t1:
     if st.button("➕ Create Ticket from Conversation"):
         # Fetch conversation messages for session
         rows = conn.execute(
-            "SELECT sender, text FROM conversation_messages WHERE session_id = ? ORDER BY id ASC",
+            "SELECT role AS sender, content AS text "
+            "FROM conversation_messages WHERE session_id = ? ORDER BY id ASC",
             (st.session_state["session_id"],),
         ).fetchall()
         msgs = [{"sender": r["sender"], "text": r["text"]} for r in rows]
@@ -351,7 +384,9 @@ if demo_enabled:
             st.rerun()
 
         # Sentiment display
-        if question and "sentiment_result" in dir() and sentiment_result:
+        if last_qa and last_qa.get("sentiment_result"):
+            sentiment_result = last_qa["sentiment_result"]
+            tone = last_qa.get("tone", "neutral")
             st.subheader("😊 Sentiment")
             scores = sentiment_result.calibrated_scores
             for label, score in sorted(scores.items(), key=lambda x: -x[1]):
@@ -376,4 +411,5 @@ if demo_enabled:
         st.code(st.session_state["session_id"])
         if st.button("🔄 New Session"):
             st.session_state["session_id"] = str(uuid.uuid4())
+            st.session_state.pop("last_qa", None)
             st.rerun()

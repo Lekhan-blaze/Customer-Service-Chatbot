@@ -110,14 +110,13 @@ class GeminiSentimentAnalyzer(SentimentAnalyzer):
     """Production sentiment analyzer using Google Gemini structured JSON output."""
 
     def __init__(self, model_name: str = "gemini-3.8-flash", api_key: str | None = None):
-        from langchain_google_genai import GoogleGenerativeAI
+        from support_bot.llm import make_gemini_llm
 
-        key = api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "fake_key_fallback"
-        self.llm = GoogleGenerativeAI(
-            model=model_name,
-            google_api_key=key,
+        self.llm = make_gemini_llm(
             temperature=0.0,
-            request_timeout=5.0,
+            timeout=30.0,
+            api_key=api_key,
+            model_name=model_name,
         )
 
     def analyze(
@@ -177,7 +176,9 @@ Return ONLY a valid JSON object:
 }}
 """
         try:
-            raw = self.llm.invoke(prompt)
+            from support_bot.llm import llm_text
+
+            raw = llm_text(self.llm.invoke(prompt))
             clean = raw.strip()
             if clean.startswith("```"):
                 clean = re.sub(r"^```[a-zA-Z]*\n", "", clean)
@@ -208,11 +209,12 @@ Return ONLY a valid JSON object:
                 low_confidence=low_conf,
             )
         except Exception:
-            return SentimentResult(
-                calibrated_scores={l: 0.0 for l in LABELS},
-                dominant_label="neutral",
-                low_confidence=True,
-            )
+            # A temporary provider outage must not turn every message into an
+            # unusable all-zero result.  Keep the support flow functional with
+            # the same deterministic classifier used by offline tests; it can
+            # still identify common high-risk messages such as duplicate
+            # charges and account compromise.
+            return FakeSentimentAnalyzer().analyze(text, context=context, config=cfg)
 
 
 class FakeSentimentAnalyzer(SentimentAnalyzer):

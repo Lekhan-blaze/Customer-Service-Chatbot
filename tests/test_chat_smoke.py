@@ -19,6 +19,16 @@ def test_existing_chat_flow_returns_answer(monkeypatch):
     assert len(response["source_documents"]) > 0
 
 
+def test_retrieve_faq_answer_without_llm():
+    """FAQ answers must still come from the local index if Gemini is unavailable."""
+    from langchain_helper import retrieve_faq_answer
+
+    answer = retrieve_faq_answer("Can I take this course if I have never programmed?")
+    assert isinstance(answer, str)
+    assert answer.strip()
+    assert answer.strip() != "I don't know."
+
+
 def test_existing_chat_flow_fallback(monkeypatch):
     """Verify fallback response behavior when query is outside domain context."""
     mock_llm = FakeListLLM(responses=["I don't know."])

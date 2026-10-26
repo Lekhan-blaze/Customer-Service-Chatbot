@@ -267,19 +267,13 @@ class GeminiAnalyzer(MessageAnalyzer):
     """Production analyzer backed by Google Gemini."""
 
     def __init__(self, model_name: str = "gemini-3.8-flash", api_key: str | None = None):
-        from langchain_google_genai import GoogleGenerativeAI
+        from support_bot.llm import make_gemini_llm
 
-        key = (
-            api_key
-            or os.environ.get("GOOGLE_API_KEY")
-            or os.environ.get("GEMINI_API_KEY")
-            or "fake_key_fallback"
-        )
-        self.llm = GoogleGenerativeAI(
-            model=model_name,
-            google_api_key=key,
+        self.llm = make_gemini_llm(
             temperature=0.0,
-            request_timeout=5.0,
+            timeout=30.0,
+            api_key=api_key,
+            model_name=model_name,
         )
 
     def analyze(
@@ -317,7 +311,9 @@ Return ONLY a valid JSON object with these exact keys:
 }}
 """
         try:
-            raw = self.llm.invoke(prompt)
+            from support_bot.llm import llm_text
+
+            raw = llm_text(self.llm.invoke(prompt))
             # Clean markdown code block if present
             clean = raw.strip()
             if clean.startswith("```"):
@@ -388,8 +384,9 @@ Text to translate:
 "{text}"
 """
         try:
-            res = self.llm.invoke(prompt)
-            return res.strip()
+            from support_bot.llm import llm_text
+
+            return llm_text(self.llm.invoke(prompt)).strip()
         except Exception:
             return text
 
@@ -409,8 +406,9 @@ Conversation:
 
 Concise Summary:"""
         try:
-            res = self.llm.invoke(prompt)
-            return res.strip()
+            from support_bot.llm import llm_text
+
+            return llm_text(self.llm.invoke(prompt)).strip()
         except Exception:
             # Fallback
             recent = [m.get("content", "") for m in messages[-3:]]
