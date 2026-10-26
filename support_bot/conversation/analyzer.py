@@ -357,11 +357,14 @@ Return ONLY a valid JSON object with these exact keys:
                 text,
                 re.IGNORECASE,
             )
-            # Deterministic fallback
+            # Deterministic fallback: Gemini call failed (no key / network error).
+            # We know the input is English — use high confidence so the
+            # clarification threshold (0.60) is NOT triggered.
             return AnalysisResult(
                 languages=["English"],
                 primary_language="English",
-                language_confidence=0.5,
+                language_confidence=1.0,
+                intent_confidences={"general_inquiry": 1.0},
                 normalized_english=text,
                 is_correction=bool(fb_match),
                 correction_field="order_id" if fb_match else None,
