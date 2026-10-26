@@ -19,3 +19,10 @@ __pycache__/
 # Local vector index folders
 faiss_index/
 *.db
+
+storage/
+kb_quarantine/
+*.db-wal
+*.db-shm
+.pytest_cache/
+test_fresh_run.db

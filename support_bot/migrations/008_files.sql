@@ -28,3 +28,6 @@ CREATE TABLE IF NOT EXISTS file_uploads (
 CREATE INDEX IF NOT EXISTS idx_file_uploads_session ON file_uploads(session_id);
 CREATE INDEX IF NOT EXISTS idx_file_uploads_ticket ON file_uploads(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_file_uploads_expires ON file_uploads(expires_at);
+
+
+INSERT INTO schema_version (version) VALUES (8);

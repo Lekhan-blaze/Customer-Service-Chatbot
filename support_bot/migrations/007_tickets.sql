@@ -41,3 +41,6 @@ CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
 CREATE INDEX IF NOT EXISTS idx_tickets_dup ON tickets(duplicate_of_ticket_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_order ON tickets(order_or_enrollment_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_audit_tid ON ticket_audit(ticket_id);
+
+
+INSERT INTO schema_version (version) VALUES (7);

@@ -1,8 +1,10 @@
 """Database helpers — SQLite connection management and migration runner."""
 
 import os
+import re
 import sqlite3
 from pathlib import Path
+from typing import List, Tuple
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 DEFAULT_DB_PATH = os.environ.get("SUPPORT_BOT_DB", "support_bot.db")
@@ -29,18 +31,50 @@ def _current_version(conn: sqlite3.Connection) -> int:
         return 0
 
 
-def run_migrations(conn: sqlite3.Connection) -> int:
-    """Apply all pending forward-only migration scripts. Return new version."""
-    current = _current_version(conn)
-    scripts = sorted(MIGRATIONS_DIR.glob("*.sql"))
-    applied = 0
+def get_migration_scripts(migrations_dir: Path | None = None) -> List[Tuple[int, Path]]:
+    """Return list of (version, script_path) sorted by version.
+    
+    Raises ValueError loudly if duplicate versions are detected.
+    """
+    directory = migrations_dir or MIGRATIONS_DIR
+    scripts = sorted(directory.glob("*.sql"))
+    seen_versions: dict[int, Path] = {}
+    parsed: List[Tuple[int, Path]] = []
+
     for script in scripts:
-        # Extract version number from filename like "001_initial.sql"
-        version = int(script.stem.split("_")[0])
+        match = re.match(r"^(\d+)_", script.name)
+        if not match:
+            continue
+        version = int(match.group(1))
+        if version in seen_versions:
+            raise ValueError(
+                f"Duplicate migration version {version:03d} detected: "
+                f"'{script.name}' conflicts with '{seen_versions[version].name}'"
+            )
+        seen_versions[version] = script
+        parsed.append((version, script))
+
+    parsed.sort(key=lambda x: x[0])
+    return parsed
+
+
+def run_migrations(conn: sqlite3.Connection, migrations_dir: Path | None = None) -> int:
+    """Apply all pending forward-only migration scripts. Return new version.
+    
+    Fails loudly on duplicate version numbers.
+    """
+    current = _current_version(conn)
+    migration_scripts = get_migration_scripts(migrations_dir)
+    
+    for version, script in migration_scripts:
         if version <= current:
             continue
         sql = script.read_text()
         conn.executescript(sql)
-        applied += 1
+        # Ensure schema_version is recorded even if script didn't explicitly insert
+        try:
+            conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (?)", (version,))
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     return _current_version(conn)
