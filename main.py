@@ -145,9 +145,12 @@ if question:
                     answer = service.format_reply(conv_resp, rag_res.answer)
                     citations = rag_res.citations
                 else:
-                    chain = get_qa_chain(tone_instruction=tone)
-                    raw_response = chain(query_to_run)
-                    answer = service.format_reply(conv_resp, raw_response["result"])
+                    try:
+                        chain = get_qa_chain(tone_instruction=tone)
+                        raw_response = chain(query_to_run)
+                        answer = service.format_reply(conv_resp, raw_response["result"])
+                    except Exception as e:
+                        answer = f"I am unable to retrieve an answer at this time ({type(e).__name__}: {str(e)[:120]}). Please check your API key or try again later."
 
         else:
             active_ver = kb_pipeline.get_active_version()
@@ -160,9 +163,12 @@ if question:
                 answer = rag_res.answer
                 citations = rag_res.citations
             else:
-                chain = get_qa_chain(tone_instruction=tone)
-                raw_response = chain(question)
-                answer = raw_response["result"]
+                try:
+                    chain = get_qa_chain(tone_instruction=tone)
+                    raw_response = chain(question)
+                    answer = raw_response["result"]
+                except Exception as e:
+                    answer = f"I am unable to retrieve an answer at this time ({type(e).__name__}: {str(e)[:120]}). Please check your API key or try again later."
 
     st.header("Answer")
     st.write(answer)
